@@ -3,8 +3,8 @@ import re
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-from utils.db import insert_product
-from utils.logger import log
+from utils.db import insert_product, get_product_by_name_and_store, update_product_price
+from utils.logger import log_debug_message as log
 
 BASE_URL = "https://www.condisline.com"
 
@@ -75,14 +75,30 @@ def scrape_category(category_name, category_url):
                     quantity = pum_el.text.strip() if pum_el else ''
 
                     full_name = f"{brand} {name}".strip()
-                    insert_product(
-                        name=full_name,
-                        price=price,
-                        category=category_name,
-                        store_id="condisline",
-                        quantity=quantity
-                    )
-                    log(f"✅ Inserted: {full_name} — {price} [ {quantity} ]")
+                    
+                    # Check if product exists
+                    existing_product = get_product_by_name_and_store(full_name, "condisline")
+                    
+                    if existing_product:
+                        # Product exists, check for price change
+                        if existing_product['price'] != price:
+                            log(f"🔄 Price changed for {full_name}: {existing_product['price']} -> {price}")
+                            print(f"🔄 Price changed for {full_name}: {existing_product['price']} -> {price}")
+                            update_product_price(existing_product['id'], price)
+                        else:
+                            log(f"No changes for {full_name}")
+                            print(f"No changes for {full_name}")
+                    else:
+                        # Product doesn't exist, insert it
+                        insert_product(
+                            name=full_name,
+                            price=price,
+                            category=category_name,
+                            store_id="condisline",
+                            quantity=quantity
+                        )
+                        log(f"✅ Inserted: {full_name} — {price} [ {quantity} ]")
+                        print(f"✅ Inserted: {full_name} — {price} [ {quantity} ]")
                 except Exception as e:
                     log(f"❌ Failed to parse or insert product: {e}")
         except Exception as e:

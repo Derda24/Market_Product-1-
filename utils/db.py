@@ -16,6 +16,7 @@ def log_debug_message(message):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(DEBUG_LOG_FILE, "a", encoding="utf-8") as log_file:
         log_file.write(f"[{timestamp}] {message}\n")
+
 def get_categories_by_store(store_id):
     """Fetches all categories for a given store_id from the Supabase 'categories' table."""
     try:
@@ -30,6 +31,51 @@ def get_categories_by_store(store_id):
     except Exception as e:
         log_debug_message(f"❌ Exception in get_categories_by_store: {e}")
         return []
+
+def get_product_by_name_and_store(name, store_id):
+    """Fetches a product by its name and store_id."""
+    try:
+        response = supabase.table("products").select("*").eq("name", name).eq("store_id", store_id).limit(1).execute()
+        if hasattr(response, "data") and response.data:
+            return response.data[0]
+        return None
+    except Exception as e:
+        log_debug_message(f"❌ Exception in get_product_by_name_and_store: {e}")
+        return None
+
+def update_product_price(product_id, new_price, store_id=None):
+    """Updates the price of a product and logs the change in price_history."""
+    try:
+        # 1. Update the product price
+        response = supabase.table("products").update({"price": new_price, "updated_at": "now()"}).eq("id", product_id).execute()
+        if hasattr(response, "data") and response.data:
+            log_debug_message(f"✅ Price updated for product ID {product_id}")
+        else:
+            log_debug_message(f"❌ Failed to update price for product ID {product_id}")
+
+        # 2. Mark previous price_history as not current
+        supabase.table("price_history").update({
+            "is_current": False,
+            "valid_until": "now()"
+        }).eq("product_id", product_id).eq("is_current", True).execute()
+
+        # 3. Insert new price_history row
+        # If store_id is not provided, try to fetch it
+        if not store_id:
+            product = supabase.table("products").select("store_id").eq("id", product_id).limit(1).execute()
+            if hasattr(product, "data") and product.data:
+                store_id = product.data[0]["store_id"]
+            else:
+                store_id = "unknown"
+        supabase.table("price_history").insert({
+            "product_id": product_id,
+            "price": new_price,
+            "store_id": store_id,
+            "is_current": True,
+            "recorded_at": "now()"
+        }).execute()
+    except Exception as e:
+        log_debug_message(f"❌ Exception in update_product_price: {e}")
 
 def insert_product(name, price, category, store_id, quantity=None):
     data = {
@@ -57,6 +103,7 @@ def insert_product(name, price, category, store_id, quantity=None):
     except Exception as e:
         print(f"❌ Exception during Supabase insert: {e}")
         log_debug_message(f"❌ Exception during Supabase insert: {e}")
+
 if __name__ == "__main__":
     # Example test
     insert_product(

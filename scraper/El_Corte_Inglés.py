@@ -2,6 +2,15 @@ import time
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from utils.db import insert_product
 from utils.logger import log_debug_message as log  # Fixed import
+from playwright.async_api import async_playwright
+# Try to import stealth, fallback to no stealth if not available
+try:
+    from playwright_stealth import stealth_async as stealth
+except ImportError:
+    try:
+        from playwright_stealth import stealth
+    except ImportError:
+        stealth = None
 
 BASE_URL = "https://www.elcorteingles.es/supermercado/despensa"
 
@@ -20,6 +29,25 @@ CATEGORIES = [
     'azucar-cacao-y-edulcorantes',
     'salsas-condimentos-y-especias'
 ]
+
+REALISTIC_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+ACCEPT_LANGUAGE = "es-ES,es;q=0.9"
+
+async def get_browser_and_page():
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=False)
+    context = await browser.new_context(
+        user_agent=REALISTIC_UA,
+        locale="es-ES",
+        extra_http_headers={
+            "User-Agent": REALISTIC_UA,
+            "Accept-Language": ACCEPT_LANGUAGE,
+        },
+    )
+    page = await context.new_page()
+    if stealth:
+        await stealth(page)
+    return browser, page
 
 def extract_product_data(page, category_slug):
     print(f"\n📦 Processing category: {category_slug}")

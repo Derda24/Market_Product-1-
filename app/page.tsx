@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { Card, CardContent } from "@/components/ui/card";
+import { createClient } from "@supabase/supabase-js";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -16,6 +15,8 @@ import {
 import { ProductCard } from "@/components/ProductCard";
 import { calculateValueScore, calculatePriceMetrics, formatPrice } from '@/lib/priceUtils';
 import { LoadingScreen } from "@/components/LoadingScreen";
+import type { Product } from './types';
+import FloatingChatWidget from "@/components/FloatingChatWidget";
 
 // Debug flag for detailed logging
 const DEBUG = process.env.NODE_ENV === 'development';
@@ -24,23 +25,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 );
-
-// Types
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  quantity: string;
-  category: string;
-  store_id: string;
-  last_updated?: string;
-  nutriscore?: 'a' | 'b' | 'c' | 'd' | 'e';
-  nova_group?: 1 | 2 | 3 | 4;
-  energy_kcal?: number;
-  sugars_100g?: number;
-  salt_100g?: number;
-  saturated_fat_100g?: number;
-}
 
 // Enhanced sort options
 type SortOption = 
@@ -68,11 +52,9 @@ export default function Home() {
 
   // Add initial loading effect
   useEffect(() => {
-    // Simulate initial loading time (you can adjust this)
     const timer = setTimeout(() => {
       setInitialLoading(false);
     }, 2000);
-
     return () => clearTimeout(timer);
   }, []);
 
@@ -94,39 +76,43 @@ export default function Home() {
     fetchProducts();
   }, []);
 
-  // Enhanced sorting function
+  // Toggle product selection for comparison
+  const toggleProductSelection = (productId: string) => {
+    const newSelection = new Set(selectedProducts);
+    if (newSelection.has(productId)) {
+      newSelection.delete(productId);
+    } else if (newSelection.size < 4) { // Limit to comparing 4 products
+      newSelection.add(productId);
+    }
+    setSelectedProducts(newSelection);
+  };
+
+  // Enhanced sorting function with nutrition scores
   const sortProducts = (products: Product[]) => {
     return [...products].sort((a, b) => {
       switch (sortBy) {
         case 'price-asc':
-          if (!a.price) return 1;
-          if (!b.price) return -1;
-          return a.price - b.price;
+          return (a.price || 0) - (b.price || 0);
           
         case 'price-desc':
-          if (!a.price) return 1;
-          if (!b.price) return -1;
-          return b.price - a.price;
+          return (b.price || 0) - (a.price || 0);
           
         case 'name':
           return a.name.localeCompare(b.name);
           
         case 'best-value':
-          if (!a.price || !b.price) return !a.price ? 1 : -1;
-          const aScore = calculateValueScore(a.price, a.quantity, a.category);
-          const bScore = calculateValueScore(b.price, b.quantity, b.category);
+          const aScore = calculateValueScore(a.price || 0, a.quantity, a.category);
+          const bScore = calculateValueScore(b.price || 0, b.quantity, b.category);
           return bScore - aScore;
           
         case 'price-per-unit':
-          if (!a.price || !b.price) return !a.price ? 1 : -1;
-          const aMetrics = calculatePriceMetrics(a.price, a.quantity);
-          const bMetrics = calculatePriceMetrics(b.price, b.quantity);
+          const aMetrics = calculatePriceMetrics(a.price || 0, a.quantity);
+          const bMetrics = calculatePriceMetrics(b.price || 0, b.quantity);
           return aMetrics.pricePerStandardUnit - bMetrics.pricePerStandardUnit;
           
         case 'bulk-deals':
-          if (!a.price || !b.price) return !a.price ? 1 : -1;
-          const aMetrics2 = calculatePriceMetrics(a.price, a.quantity);
-          const bMetrics2 = calculatePriceMetrics(b.price, b.quantity);
+          const aMetrics2 = calculatePriceMetrics(a.price || 0, a.quantity);
+          const bMetrics2 = calculatePriceMetrics(b.price || 0, b.quantity);
           const aBulkScore = (aMetrics2.isMultiPack ? 1 : 0) * (1 / aMetrics2.pricePerStandardUnit);
           const bBulkScore = (bMetrics2.isMultiPack ? 1 : 0) * (1 / bMetrics2.pricePerStandardUnit);
           return bBulkScore - aBulkScore;
@@ -137,9 +123,9 @@ export default function Home() {
           return bDate.getTime() - aDate.getTime();
 
         case 'nutriscore':
-          const nutriScores = { 'a': 5, 'b': 4, 'c': 3, 'd': 2, 'e': 1 };
-          const aNutriScore = nutriScores[a.nutriscore?.toLowerCase()] || 0;
-          const bNutriScore = nutriScores[b.nutriscore?.toLowerCase()] || 0;
+          const nutriScores: Record<string, number> = { 'a': 5, 'b': 4, 'c': 3, 'd': 2, 'e': 1 };
+          const aNutriScore = a.nutriscore ? nutriScores[a.nutriscore.toLowerCase()] || 0 : 0;
+          const bNutriScore = b.nutriscore ? nutriScores[b.nutriscore.toLowerCase()] || 0 : 0;
           return bNutriScore - aNutriScore;
 
         case 'nova-score':
@@ -153,42 +139,26 @@ export default function Home() {
     });
   };
 
-  // Toggle product selection for comparison
-  const toggleProductSelection = (productId: string) => {
-    const newSelection = new Set(selectedProducts);
-    if (newSelection.has(productId)) {
-      newSelection.delete(productId);
-    } else if (newSelection.size < 4) { // Limit to comparing 4 products
-      newSelection.add(productId);
-    }
-    setSelectedProducts(newSelection);
-  };
-
+  // Filter products
   useEffect(() => {
-    console.log('🔍 Filtering and sorting products...');
-    
-    const filteredProducts = products.filter((p) => {
-      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
-      const matchesStore = !store || p.store_id === store;
-      const matchesPrice = typeof p.price === 'number' ? 
-        (p.price >= priceRange[0] && p.price <= priceRange[1]) : 
+    const filteredProducts = products.filter((product: Product) => {
+      const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase());
+      const matchesStore = !store || product.store_id === store;
+      const matchesPrice = typeof product.price === 'number' ? 
+        (product.price >= priceRange[0] && product.price <= priceRange[1]) : 
         false;
       
       return matchesSearch && matchesStore && matchesPrice;
     });
 
-    // Apply sorting
-    const sortedProducts = sortProducts(filteredProducts);
-    
-    console.log('🔍 Filter and sort results:', {
-      before: products.length,
-      afterFilter: filteredProducts.length,
-      afterSort: sortedProducts.length,
-      sortBy
-    });
-    
-    setFiltered(sortedProducts);
+    setFiltered(sortProducts(filteredProducts));
   }, [search, store, priceRange, products, sortBy]);
+
+  // Add a function to handle exiting compare mode and clearing selection
+  const handleExitCompare = () => {
+    setCompareMode(false);
+    setSelectedProducts(new Set());
+  };
 
   return (
     <>
@@ -204,11 +174,11 @@ export default function Home() {
             <Input
               placeholder="🔍 Search products"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
               className="shadow-md border-gray-300"
             />
 
-            <Select onValueChange={(val) => setStore(val)}>
+            <Select onValueChange={(val: string) => setStore(val)}>
               <SelectTrigger className="shadow-md border-gray-300">
                 <SelectValue placeholder="🏬 Filter by store" />
               </SelectTrigger>
@@ -222,24 +192,24 @@ export default function Home() {
                 <SelectItem value="mercadona.es">Mercadona</SelectItem>
                 <SelectItem value="El Corte InglEl Corte Inglés">El Corte Inglés</SelectItem>
                 <SelectItem value="alcampo">Alcampo</SelectItem>
-                <SelectItem value="dia.es">Alcampo</SelectItem>
+                <SelectItem value="dia.es">Dia</SelectItem>
               </SelectContent>
             </Select>
 
-            <Select onValueChange={(val) => setSortBy(val as SortOption)}>
+            <Select onValueChange={(val: string) => setSortBy(val as SortOption)}>
               <SelectTrigger className="shadow-md border-gray-300">
                 <SelectValue placeholder="🔄 Sort by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="price-asc">Price: Low to High</SelectItem>
-                <SelectItem value="price-desc">Price: High to Low</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="best-value">Best Value</SelectItem>
-                <SelectItem value="price-per-unit">Price per Unit</SelectItem>
-                <SelectItem value="bulk-deals">Bulk Deals</SelectItem>
-                <SelectItem value="recent-changes">Recently Updated</SelectItem>
-                <SelectItem value="nutriscore">Best Nutrition (Nutri-Score)</SelectItem>
-                <SelectItem value="nova-score">Least Processed (NOVA)</SelectItem>
+                <SelectItem value="price-asc">💰 Price: Low to High</SelectItem>
+                <SelectItem value="price-desc">💎 Price: High to Low</SelectItem>
+                <SelectItem value="name">📝 Name</SelectItem>
+                <SelectItem value="best-value">⭐ Best Value</SelectItem>
+                <SelectItem value="price-per-unit">📊 Price per Unit</SelectItem>
+                <SelectItem value="bulk-deals">📦 Bulk Deals</SelectItem>
+                <SelectItem value="recent-changes">🔄 Recently Updated</SelectItem>
+                <SelectItem value="nutriscore">🥗 Best Nutrition (Nutri-Score)</SelectItem>
+                <SelectItem value="nova-score">🌱 Least Processed (NOVA)</SelectItem>
               </SelectContent>
             </Select>
 
@@ -260,62 +230,52 @@ export default function Home() {
                 min={0}
                 max={100}
                 step={1}
-                onValueChange={(val) => setPriceRange(val)}
+                onValueChange={(val: number[]) => setPriceRange(val)}
               />
             </div>
           </div>
 
-          {/* Comparison View */}
-          {compareMode && selectedProducts.size > 0 && (
-            <div className="mb-8 bg-white p-6 rounded-xl shadow-sm overflow-x-auto">
+          {/* Comparison View - Always visible in compare mode */}
+          {compareMode && (
+            <div className="mb-8 bg-white p-6 rounded-xl shadow-sm overflow-x-auto sticky top-0 z-20">
               <h3 className="text-lg font-semibold mb-4">Product Comparison</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {filtered
-                  .filter(p => selectedProducts.has(p.id))
-                  .map(product => (
-                    <div key={product.id} className="bg-gray-50 p-4 rounded-lg">
-                      <h4 className="font-medium">{product.name}</h4>
-                      <div className="mt-2 space-y-2 text-sm">
-                        <p>Price: {formatPrice(product.price, { style: 'detailed', quantity: product.quantity })}</p>
-                        <p>Category: {product.category}</p>
-                        <p>Store: {product.store_id}</p>
-                        <p>Quantity: {product.quantity}</p>
-                        {product.price && (
-                          <p>Value Score: {calculateValueScore(product.price, product.quantity, product.category).toFixed(0)}/100</p>
-                        )}
+              {selectedProducts.size === 0 ? (
+                <div className="text-gray-500 text-center py-8">
+                  Select up to 4 products to compare.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {filtered
+                    .filter(p => selectedProducts.has(p.id))
+                    .map(product => (
+                      <div key={product.id} className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-medium">{product.name}</h4>
+                        <div className="mt-2 space-y-2 text-sm">
+                          <p>Price: {product.price !== null ? formatPrice(product.price) : 'N/A'}</p>
+                          <p>Category: {product.category}</p>
+                          <p>Store: {product.store_id}</p>
+                          <p>Quantity: {product.quantity}</p>
+                          {product.price && (
+                            <p>Value Score: {calculateValueScore(product.price, product.quantity, product.category).toFixed(0)}/100</p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-              </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* Product Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filtered.map((product) => (
-              <div key={product.id} className="relative">
-                {compareMode && (
-                  <button
-                    onClick={() => toggleProductSelection(product.id)}
-                    className={`absolute top-2 right-2 z-10 p-2 rounded-full ${
-                      selectedProducts.has(product.id)
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-gray-600'
-                    }`}
-                  >
-                    {selectedProducts.has(product.id) ? '✓' : '+'}
-                  </button>
-                )}
-                <ProductCard
-                  id={product.id}
-                  name={product.name}
-                  price={product.price}
-                  category={product.category}
-                  store_id={product.store_id}
-                  quantity={product.quantity}
-                  image_url={product.image_url}
-                />
-              </div>
+              <ProductCard
+                key={product.id}
+                product={product}
+                onSelect={compareMode ? toggleProductSelection : undefined}
+                isSelected={selectedProducts.has(product.id)}
+                showComparison={compareMode}
+              />
             ))}
           </div>
 
@@ -324,6 +284,8 @@ export default function Home() {
               ❌ No matching products found. Try adjusting your filters.
             </p>
           )}
+
+          <FloatingChatWidget />
         </div>
       </main>
     </>
