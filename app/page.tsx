@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -16,16 +15,11 @@ import { ProductCard } from "@/components/ProductCard";
 import { calculateValueScore, calculatePriceMetrics, formatPrice } from '@/lib/priceUtils';
 import { LoadingScreen } from "@/components/LoadingScreen";
 import type { Product } from './types';
+import FloatingChatWidget from "@/components/FloatingChatWidget";
 
 // Debug flag for detailed logging
 const DEBUG = process.env.NODE_ENV === 'development';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
-);
-
-// Enhanced sort options
 type SortOption = 
   | 'price-asc' 
   | 'price-desc' 
@@ -57,13 +51,14 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Update the fetchProducts function
+  // Update the fetchProducts function to use the API route
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      const { data } = await supabase.from("products").select("*");
-      setProducts(data || []);
-      setFiltered(data || []);
+      const res = await fetch('/api/products');
+      const json = await res.json();
+      setProducts(json.products || []);
+      setFiltered(json.products || []);
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
@@ -153,6 +148,12 @@ export default function Home() {
     setFiltered(sortProducts(filteredProducts));
   }, [search, store, priceRange, products, sortBy]);
 
+  // Add a function to handle exiting compare mode and clearing selection
+  const handleExitCompare = () => {
+    setCompareMode(false);
+    setSelectedProducts(new Set());
+  };
+
   return (
     <>
       <LoadingScreen isLoading={initialLoading} />
@@ -228,6 +229,37 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Comparison View - Always visible in compare mode */}
+          {compareMode && (
+            <div className="mb-8 bg-white p-6 rounded-xl shadow-sm overflow-x-auto sticky top-0 z-20">
+              <h3 className="text-lg font-semibold mb-4">Product Comparison</h3>
+              {selectedProducts.size === 0 ? (
+                <div className="text-gray-500 text-center py-8">
+                  Select up to 4 products to compare.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {filtered
+                    .filter(p => selectedProducts.has(p.id))
+                    .map(product => (
+                      <div key={product.id} className="bg-gray-50 p-4 rounded-lg">
+                        <h4 className="font-medium">{product.name}</h4>
+                        <div className="mt-2 space-y-2 text-sm">
+                          <p>Price: {product.price !== null ? formatPrice(product.price) : 'N/A'}</p>
+                          <p>Category: {product.category}</p>
+                          <p>Store: {product.store_id}</p>
+                          <p>Quantity: {product.quantity}</p>
+                          {product.price && (
+                            <p>Value Score: {calculateValueScore(product.price, product.quantity, product.category).toFixed(0)}/100</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Product Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filtered.map((product) => (
@@ -246,6 +278,8 @@ export default function Home() {
               ❌ No matching products found. Try adjusting your filters.
             </p>
           )}
+
+          <FloatingChatWidget />
         </div>
       </main>
     </>

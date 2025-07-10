@@ -1,10 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
-);
-
 export interface PriceHistory {
   id: string;
   product_id: string;
@@ -29,14 +22,10 @@ export interface PriceAnalytics {
 
 export async function updateProductPrice(productId: string, newPrice: number, storeId: string) {
   try {
-    const { data, error } = await supabase
-      .from('products')
-      .update({ price: newPrice })
-      .eq('id', productId)
-      .select();
-
-    if (error) throw error;
-    return data;
+    const res = await fetch(`/api/priceTracking/updatePrice?productId=${encodeURIComponent(productId)}&newPrice=${newPrice}&storeId=${encodeURIComponent(storeId)}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    return json.data;
   } catch (error) {
     console.error('Error updating price:', error);
     throw error;
@@ -45,44 +34,44 @@ export async function updateProductPrice(productId: string, newPrice: number, st
 
 export async function getPriceHistory(productId: string): Promise<PriceAnalytics> {
   try {
-    // Get all price history for the product
-    const { data: history, error } = await supabase
-      .from('price_history')
-      .select('*')
-      .eq('product_id', productId)
-      .order('recorded_at', { ascending: false });
-
-    if (error) throw error;
-
+    const res = await fetch(`/api/priceTracking?productId=${encodeURIComponent(productId)}`);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API error: ${res.status} - ${text}`);
+    }
+    let json;
+    try {
+      json = await res.json();
+    } catch (e) {
+      const text = await res.text();
+      console.error('Failed to parse JSON. Response text:', text);
+      throw new Error('Failed to parse JSON from API response');
+    }
+    const history = json.priceHistory;
     if (!history || history.length === 0) {
       throw new Error('No price history found');
     }
 
     // Current price is the most recent one
     const currentPrice = history[0].price;
-    
     // Previous price is the second most recent
     const previousPrice = history.length > 1 ? history[1].price : null;
-    
     // Calculate price change
     const priceChange = previousPrice ? currentPrice - previousPrice : null;
     const percentageChange = previousPrice ? ((currentPrice - previousPrice) / previousPrice) * 100 : null;
-
     // Calculate weekly average (last 7 days)
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const weeklyPrices = history.filter(p => new Date(p.recorded_at) >= weekAgo);
-    const weeklyAverage = weeklyPrices.reduce((sum, p) => sum + p.price, 0) / weeklyPrices.length;
-
+    const weeklyPrices = history.filter((p: PriceHistory) => new Date(p.recorded_at) >= weekAgo);
+    const weeklyAverage = weeklyPrices.reduce((sum: number, p: PriceHistory) => sum + p.price, 0) / (weeklyPrices.length || 1);
     // Calculate monthly average (last 30 days)
     const monthAgo = new Date();
     monthAgo.setDate(monthAgo.getDate() - 30);
-    const monthlyPrices = history.filter(p => new Date(p.recorded_at) >= monthAgo);
-    const monthlyAverage = monthlyPrices.reduce((sum, p) => sum + p.price, 0) / monthlyPrices.length;
-
+    const monthlyPrices = history.filter((p: PriceHistory) => new Date(p.recorded_at) >= monthAgo);
+    const monthlyAverage = monthlyPrices.reduce((sum: number, p: PriceHistory) => sum + p.price, 0) / (monthlyPrices.length || 1);
     // Get lowest and highest prices
-    const lowestPrice = Math.min(...history.map(p => p.price));
-    const highestPrice = Math.max(...history.map(p => p.price));
+    const lowestPrice = Math.min(...history.map((p: PriceHistory) => p.price));
+    const highestPrice = Math.max(...history.map((p: PriceHistory) => p.price));
 
     return {
       currentPrice,
@@ -106,22 +95,9 @@ export async function getProductsWithPriceChanges(days: number = 7) {
     const date = new Date();
     date.setDate(date.getDate() - days);
 
-    const { data, error } = await supabase
-      .from('price_history')
-      .select(`
-        *,
-        products (
-          name,
-          category,
-          store_id
-        )
-      `)
-      .gte('recorded_at', date.toISOString())
-      .order('recorded_at', { ascending: false });
-
-    if (error) throw error;
-
-    return data;
+    const res = await fetch(`/api/priceTracking/priceChanges?days=${days}`);
+    const json = await res.json();
+    return json.priceChanges;
   } catch (error) {
     console.error('Error fetching price changes:', error);
     throw error;
