@@ -37,9 +37,9 @@ For all other questions, reply conversationally.`
       if (parsed.category) params.append('category', parsed.category)
       if (parsed.price_max) params.append('price_max', parsed.price_max)
 
-      const dbRes = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/products?${params.toString()}`, {
+      const dbRes = await fetch(`${process.env.SUPABASE_URL}/products?${params.toString()}`, {
         headers: {
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_KEY
+          apikey: process.env.SUPABASE_SERVICE_KEY
         }
       })
 

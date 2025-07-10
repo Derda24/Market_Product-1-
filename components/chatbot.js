@@ -28,9 +28,9 @@ export default async function handler(req, res) {
     if (parsed.category) params.append('category', parsed.category)
     if (parsed.price_max) params.append('price_max', parsed.price_max)
 
-    const dbRes = await fetch(`${process.env.SUPABASE_REST_URL}/products?${params.toString()}`, {
+    const dbRes = await fetch(`${process.env.SUPABASE_URL}/products?${params.toString()}`, {
       headers: {
-        apikey: process.env.SUPABASE_API_KEY
+        apikey: process.env.SUPABASE_SERVICE_KEY
       }
     })
 
