@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -21,12 +20,6 @@ import FloatingChatWidget from "@/components/FloatingChatWidget";
 // Debug flag for detailed logging
 const DEBUG = process.env.NODE_ENV === 'development';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
-);
-
-// Enhanced sort options
 type SortOption = 
   | 'price-asc' 
   | 'price-desc' 
@@ -58,13 +51,14 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Update the fetchProducts function
+  // Update the fetchProducts function to use the API route
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      const { data } = await supabase.from("products").select("*");
-      setProducts(data || []);
-      setFiltered(data || []);
+      const res = await fetch('/api/products');
+      const json = await res.json();
+      setProducts(json.products || []);
+      setFiltered(json.products || []);
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
