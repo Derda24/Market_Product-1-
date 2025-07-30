@@ -36,7 +36,7 @@ export default function Home() {
   const [filtered, setFiltered] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [store, setStore] = useState("");
-  const [priceRange, setPriceRange] = useState([0, 100]);
+  const [priceRange, setPriceRange] = useState([0.01, 100]);
   const [isLoading, setIsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('price-asc');
   const [compareMode, setCompareMode] = useState(false);
