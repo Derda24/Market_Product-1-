@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,20 +9,41 @@ import {
 } from "@/components/ui/tooltip";
 import { getPriceHistory, PriceAnalytics } from '@/lib/priceTracking';
 import { calculatePriceMetrics, formatPrice } from '@/lib/priceUtils';
+import { shouldUseImageFallback, generateFallbackImage } from '@/utils/imageQuality';
 import type { Product, ProductCardProps } from '@/app/types';
 
-// Store name mapping
-const STORE_NAMES: { [key: string]: string } = {
-  'lidl.es': 'Lidl',
-  'carrefour.es': 'Carrefour',
-  'aldi': 'Aldi',
-  'bonarea': 'BonÀrea',
-  'bonpreu': 'Bonpreu',
-  'condisline': 'Condisline',
-  'mercadona.es': 'Mercadona',
-  'El Corte Inglés': 'El Corte Inglés',
-  'alcampo': 'Alcampo',
-  'dia.es': 'Dia'
+// Store name mapping with brand colors
+const STORE_NAMES: { [key: string]: { name: string; color: string; bgColor: string } } = {
+  'lidl.es': { name: 'Lidl', color: 'text-blue-600', bgColor: 'bg-blue-50' },
+  'carrefour.es': { name: 'Carrefour', color: 'text-red-600', bgColor: 'bg-red-50' },
+  'aldi': { name: 'Aldi', color: 'text-orange-600', bgColor: 'bg-orange-50' },
+  'bonarea': { name: 'BonÀrea', color: 'text-green-600', bgColor: 'bg-green-50' },
+  'bonpreu': { name: 'Bonpreu', color: 'text-purple-600', bgColor: 'bg-purple-50' },
+  'condisline': { name: 'Condisline', color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
+  'mercadona.es': { name: 'Mercadona', color: 'text-pink-600', bgColor: 'bg-pink-50' },
+  'El Corte Inglés': { name: 'El Corte Inglés', color: 'text-yellow-600', bgColor: 'bg-yellow-50' },
+  'alcampo': { name: 'Alcampo', color: 'text-teal-600', bgColor: 'bg-teal-50' },
+  'dia.es': { name: 'Dia', color: 'text-gray-600', bgColor: 'bg-gray-50' }
+};
+
+// Category-based placeholder images
+const CATEGORY_ICONS: { [key: string]: string } = {
+  'Fruits and Vegetables': '🥬',
+  'Dairy and Eggs': '🥛',
+  'Meat and Fish': '🥩',
+  'Bread and Pastries': '🥖',
+  'Beverages': '🥤',
+  'Snacks': '🍿',
+  'Frozen Foods': '❄️',
+  'Canned Goods': '🥫',
+  'Pasta and Rice': '🍝',
+  'Oils and Sauces': '🫗',
+  'Sweets and Chocolate': '🍫',
+  'Cleaning Products': '🧽',
+  'Personal Care': '🧴',
+  'Baby Products': '👶',
+  'Pet Food': '🐕',
+  'default': '🛍️'
 };
 
 const ProductCard: React.FC<ProductCardProps> = ({ 
@@ -33,6 +54,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const [priceAnalytics, setPriceAnalytics] = useState<PriceAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const loadPriceHistory = async () => {
     try {
@@ -48,170 +71,244 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
   const priceMetrics = product.price ? calculatePriceMetrics(product.price, product.quantity) : { pricePerStandardUnit: 0, standardUnit: '' };
   
-  // Nutrition score display helper
+  // Enhanced nutrition score display
   const getNutriscoreColor = (score: string) => {
-    const colors: { [key: string]: string } = {
-      'a': 'bg-green-500',
-      'b': 'bg-light-green-400',
-      'c': 'bg-yellow-400',
-      'd': 'bg-orange-400',
-      'e': 'bg-red-500'
+    const colors: { [key: string]: { bg: string; text: string } } = {
+      'a': { bg: 'bg-gradient-to-r from-green-400 to-green-600', text: 'text-white' },
+      'b': { bg: 'bg-gradient-to-r from-lime-400 to-lime-600', text: 'text-white' },
+      'c': { bg: 'bg-gradient-to-r from-yellow-400 to-yellow-600', text: 'text-gray-800' },
+      'd': { bg: 'bg-gradient-to-r from-orange-400 to-orange-600', text: 'text-white' },
+      'e': { bg: 'bg-gradient-to-r from-red-400 to-red-600', text: 'text-white' }
     };
-    return colors[score?.toLowerCase()] || 'bg-gray-300';
+    return colors[score?.toLowerCase()] || { bg: 'bg-gray-300', text: 'text-gray-700' };
   };
 
   const getNovaGroupColor = (group: number) => {
     const colors = [
-      'bg-green-500',
-      'bg-yellow-400',
-      'bg-orange-400',
-      'bg-red-500'
+      { bg: 'bg-gradient-to-r from-green-400 to-green-600', text: 'text-white' },
+      { bg: 'bg-gradient-to-r from-lime-400 to-lime-600', text: 'text-white' },
+      { bg: 'bg-gradient-to-r from-yellow-400 to-yellow-600', text: 'text-gray-800' },
+      { bg: 'bg-gradient-to-r from-red-400 to-red-600', text: 'text-white' }
     ];
-    return colors[group - 1] || 'bg-gray-300';
+    return colors[group - 1] || { bg: 'bg-gray-300', text: 'text-gray-700' };
   };
 
-  const getStoreName = (storeId: string) => {
-    return STORE_NAMES[storeId] || storeId;
+  const getStoreInfo = (storeId: string) => {
+    return STORE_NAMES[storeId] || { name: storeId, color: 'text-gray-600', bgColor: 'bg-gray-50' };
   };
+
+  const getCategoryIcon = (category: string) => {
+    return CATEGORY_ICONS[category] || CATEGORY_ICONS.default;
+  };
+
+  const storeInfo = getStoreInfo(product.store_id);
+  const nutriScoreColors = product.nutriscore ? getNutriscoreColor(product.nutriscore) : null;
+  const novaColors = product.nova_group ? getNovaGroupColor(product.nova_group) : null;
 
   return (
     <Card 
-      className={`relative overflow-hidden transition-all duration-200 hover:shadow-lg
-        ${isSelected ? 'ring-2 ring-blue-500 shadow-lg' : ''}
-        ${showComparison ? 'cursor-pointer hover:scale-105' : ''}`}
+      className={`relative overflow-hidden transition-all duration-300 hover:shadow-xl hover:scale-105 group
+        ${isSelected ? 'ring-2 ring-blue-500 shadow-xl scale-105' : ''}
+        ${showComparison ? 'cursor-pointer' : ''}
+        bg-white border-0 shadow-lg hover:shadow-2xl`}
       onClick={() => onSelect && onSelect(product.id)}
     >
+      {/* Selection indicator */}
       {showComparison && (
-        <div className="absolute top-2 right-2 z-10">
-          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center
-            ${isSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-gray-300 bg-white'}`}>
+        <div className="absolute top-3 right-3 z-20">
+          <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200
+            ${isSelected ? 'bg-blue-500 border-blue-500 text-white scale-110' : 'border-gray-300 bg-white/90 backdrop-blur-sm'}`}>
             {isSelected && '✓'}
           </div>
         </div>
       )}
 
-      <CardContent className="p-4">
-        {/* Product Image */}
-        <div className="mb-4 flex justify-center">
-          {product.image_url ? (
-            <img 
-              src={product.image_url} 
-              alt={product.name}
-              className="w-full h-32 object-contain rounded-lg bg-gray-50"
-              onError={(e) => {
-                // Show fallback if image fails to load
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }}
-            />
-          ) : null}
-          {/* Fallback placeholder */}
-          <div className={`w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center ${product.image_url ? 'hidden' : ''}`}>
-            <div className="text-gray-400 text-center">
-              <svg className="w-8 h-8 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-              </svg>
-              <p className="text-xs">No image</p>
+      {/* Price badge */}
+      {product.price && (
+        <div className="absolute top-3 left-3 z-10">
+          <div className="bg-gradient-to-r from-green-400 to-green-600 text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg">
+            {formatPrice(product.price)}€
+          </div>
+        </div>
+      )}
+
+      <CardContent className="p-0">
+        {/* Enhanced Product Image Section */}
+        <div className="relative h-48 bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+          {product.image_url && !imageError && !shouldUseImageFallback(product.image_url, product) ? (
+            <>
+              {/* Loading skeleton */}
+              {!imageLoaded && (
+                <div className="absolute inset-0 bg-gradient-to-r from-gray-200 to-gray-300 animate-pulse flex items-center justify-center">
+                  <div className="text-gray-400">
+                    <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                </div>
+              )}
+              
+              <img 
+                src={product.image_url} 
+                alt={product.name}
+                className={`w-full h-full object-contain transition-opacity duration-300 ${
+                  imageLoaded ? 'opacity-100' : 'opacity-0'
+                }`}
+                onLoad={() => setImageLoaded(true)}
+                onError={() => {
+                  setImageError(true);
+                  setImageLoaded(true);
+                }}
+                loading="lazy"
+              />
+            </>
+          ) : (
+            /* Enhanced fallback with category icon and store colors */
+            (() => {
+              const fallback = generateFallbackImage(product) as any;
+              return (
+                <div className={`w-full h-full flex flex-col items-center justify-center bg-gradient-to-br ${fallback.colors.bg} to-${fallback.colors.bg.replace('bg-', '')}-100`}>
+                  <div className="text-6xl mb-2 animate-float">{fallback.icon}</div>
+                  <div className="text-gray-600 text-sm text-center px-4 font-medium">
+                    {fallback.text}
+                  </div>
+                </div>
+              );
+            })()
+          )}
+          
+          {/* Image overlay gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent pointer-events-none"></div>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {/* Store Badge */}
+          <div className="flex items-center justify-between">
+            <span className={`inline-block ${storeInfo.bgColor} ${storeInfo.color} text-xs font-semibold px-3 py-1.5 rounded-full`}>
+              {storeInfo.name}
+            </span>
+            
+            {/* Nutrition badges */}
+            <div className="flex gap-2">
+              {product.nutriscore && nutriScoreColors && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <div className={`${nutriScoreColors.bg} ${nutriScoreColors.text} px-2 py-1 rounded-full text-xs font-bold shadow-sm`}>
+                        {product.nutriscore.toUpperCase()}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Nutri-Score: {product.nutriscore.toUpperCase()}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              
+              {product.nova_group && novaColors && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <div className={`${novaColors.bg} ${novaColors.text} px-2 py-1 rounded-full text-xs font-bold shadow-sm`}>
+                        NOVA {product.nova_group}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>NOVA Group: {product.nova_group}</p>
+                      <p className="text-xs">Food processing classification</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Store Badge */}
-        <div className="mb-3">
-          <span className="inline-block bg-gray-100 text-gray-700 text-xs font-medium px-2 py-1 rounded">
-            {getStoreName(product.store_id)}
-          </span>
-        </div>
+          {/* Product Name */}
+          <h3 className="text-lg font-bold text-gray-800 leading-tight line-clamp-2 group-hover:text-blue-600 transition-colors">
+            {product.name}
+          </h3>
 
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="text-lg font-semibold text-gray-800 flex-1">{product.name}</h3>
-          {product.nutriscore && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <div className={`${getNutriscoreColor(product.nutriscore)} text-white px-2 py-1 rounded-full text-sm font-bold ml-2`}>
-                    {product.nutriscore.toUpperCase()}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Nutri-Score: {product.nutriscore.toUpperCase()}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
+          {/* Quantity */}
+          <div className="text-sm text-gray-600 font-medium">{product.quantity}</div>
 
-        <div className="text-sm text-gray-600 mb-4">{product.quantity}</div>
-        
-        <div className="flex justify-between items-center mb-2">
-          <div className="text-2xl font-bold text-gray-900">
-            {product.price ? `${formatPrice(product.price)}€` : 'Price not available'}
-          </div>
-          {product.nova_group && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <div className={`${getNovaGroupColor(product.nova_group)} text-white px-2 py-1 rounded-full text-sm ml-2`}>
-                    NOVA {product.nova_group}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>NOVA Group: {product.nova_group}</p>
-                  <p className="text-xs">Food processing classification</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-
-        {/* Category Badge */}
-        <div className="mb-3">
-          <span className="inline-block bg-blue-50 text-blue-700 text-xs font-medium px-2 py-1 rounded">
-            {product.category}
-          </span>
-        </div>
-
-        {/* Nutrition Facts */}
-        {(product.energy_kcal || product.sugars_100g || product.salt_100g || product.saturated_fat_100g) && (
-          <div className="mt-4 p-2 bg-gray-50 rounded-lg">
-            <div className="text-xs font-semibold text-gray-700 mb-1">Nutrition per 100g:</div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {product.energy_kcal && (
-                <div>Energy: {product.energy_kcal}kcal</div>
-              )}
-              {product.sugars_100g && (
-                <div>Sugars: {product.sugars_100g}g</div>
-              )}
-              {product.salt_100g && (
-                <div>Salt: {product.salt_100g}g</div>
-              )}
-              {product.saturated_fat_100g && (
-                <div>Sat. Fat: {product.saturated_fat_100g}g</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="mt-2 text-sm text-gray-500">
+          {/* Price per unit */}
           {priceMetrics.pricePerStandardUnit > 0 && (
-            <div>{formatPrice(priceMetrics.pricePerStandardUnit)}€/{priceMetrics.standardUnit}</div>
+            <div className="text-sm text-gray-500 font-medium">
+              {formatPrice(priceMetrics.pricePerStandardUnit)}€/{priceMetrics.standardUnit}
+            </div>
           )}
-        </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4 w-full"
-          onClick={(e) => {
-            e.stopPropagation();
-            loadPriceHistory();
-          }}
-          disabled={isLoading || !product.price}
-        >
-          {isLoading ? 'Loading...' : 
-           !product.price ? 'Price not available' :
-           priceAnalytics ? 'Refresh Price History' : 'View Price History'}
-        </Button>
+          {/* Category Badge */}
+          <div className="flex items-center gap-2">
+            <span className="inline-block bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 text-xs font-medium px-3 py-1.5 rounded-full border border-blue-200">
+              {product.category}
+            </span>
+          </div>
+
+          {/* Enhanced Nutrition Facts */}
+          {(product.energy_kcal || product.sugars_100g || product.salt_100g || product.saturated_fat_100g) && (
+            <div className="mt-3 p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
+              <div className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
+                <span>🥗</span> Nutrition per 100g
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {product.energy_kcal && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Energy:</span>
+                    <span className="font-medium">{product.energy_kcal}kcal</span>
+                  </div>
+                )}
+                {product.sugars_100g && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Sugars:</span>
+                    <span className="font-medium">{product.sugars_100g}g</span>
+                  </div>
+                )}
+                {product.salt_100g && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Salt:</span>
+                    <span className="font-medium">{product.salt_100g}g</span>
+                  </div>
+                )}
+                {product.saturated_fat_100g && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Sat. Fat:</span>
+                    <span className="font-medium">{product.saturated_fat_100g}g</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Action Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4 w-full bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border-blue-200 text-blue-700 hover:text-blue-800 transition-all duration-200 font-medium"
+            onClick={(e) => {
+              e.stopPropagation();
+              loadPriceHistory();
+            }}
+            disabled={isLoading || !product.price}
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Loading...
+              </div>
+            ) : !product.price ? (
+              'Price not available'
+            ) : priceAnalytics ? (
+              'Refresh Price History'
+            ) : (
+              'View Price History'
+            )}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

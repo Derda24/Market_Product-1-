@@ -36,7 +36,7 @@ export default function Home() {
   const [filtered, setFiltered] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [store, setStore] = useState("");
-  const [priceRange, setPriceRange] = useState([0, 100]);
+  const [priceRange, setPriceRange] = useState([0.01, 100]);
   const [isLoading, setIsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('price-asc');
   const [compareMode, setCompareMode] = useState(false);
@@ -159,127 +159,204 @@ export default function Home() {
       <LoadingScreen isLoading={initialLoading} />
       
       <main className={`transition-opacity duration-500 ${initialLoading ? 'opacity-0' : 'opacity-100'}`}>
-        <div className="p-4 md:p-10 bg-gradient-to-b from-white to-gray-100 min-h-screen">
-          <h1 className="text-5xl font-extrabold text-center text-gray-800 mb-12 drop-shadow-sm">
-            🛍 Barcelona Market Product Explorer
-          </h1>
+        {/* Enhanced Background with Gradient */}
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 relative overflow-hidden">
+          {/* Background decorative elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-200 to-indigo-200 rounded-full opacity-20 blur-3xl"></div>
+            <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-indigo-200 to-purple-200 rounded-full opacity-20 blur-3xl"></div>
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-br from-green-200 to-blue-200 rounded-full opacity-10 blur-3xl"></div>
+          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10 items-end bg-white p-6 rounded-xl shadow-sm">
-            <Input
-              placeholder="🔍 Search products"
-              value={search}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-              className="shadow-md border-gray-300"
-            />
+          <div className="relative z-10 p-4 md:p-10">
+            {/* Enhanced Header */}
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-6 shadow-lg">
+                <span className="text-3xl">🛍️</span>
+              </div>
+              <h1 className="text-5xl md:text-6xl font-extrabold bg-gradient-to-r from-gray-800 via-blue-800 to-indigo-800 bg-clip-text text-transparent mb-4">
+                Barcelona Market Explorer
+              </h1>
+              <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
+                Discovering the best prices across local markets with smart product insights and nutritional guidance
+              </p>
+            </div>
 
-            <Select onValueChange={(val: string) => setStore(val)}>
-              <SelectTrigger className="shadow-md border-gray-300">
-                <SelectValue placeholder="🏬 Filter by store" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lidl.es">Lidl</SelectItem>
-                <SelectItem value="carrefour.es">Carrefour</SelectItem>
-                <SelectItem value="aldi">Aldi</SelectItem>
-                <SelectItem value="bonarea">BonÀrea</SelectItem>
-                <SelectItem value="bonpreu">Bonpreu</SelectItem>
-                <SelectItem value="condisline">Condisline</SelectItem>
-                <SelectItem value="mercadona.es">Mercadona</SelectItem>
-                <SelectItem value="El Corte InglEl Corte Inglés">El Corte Inglés</SelectItem>
-                <SelectItem value="alcampo">Alcampo</SelectItem>
-                <SelectItem value="dia.es">Dia</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Enhanced Filter Section */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+              <div className="relative">
+                <Input
+                  placeholder="🔍 Search products..."
+                  value={search}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                  className="h-12 bg-white/80 backdrop-blur-sm border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
 
-            <Select onValueChange={(val: string) => setSortBy(val as SortOption)}>
-              <SelectTrigger className="shadow-md border-gray-300">
-                <SelectValue placeholder="🔄 Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="price-asc">💰 Price: Low to High</SelectItem>
-                <SelectItem value="price-desc">💎 Price: High to Low</SelectItem>
-                <SelectItem value="name">📝 Name</SelectItem>
-                <SelectItem value="best-value">⭐ Best Value</SelectItem>
-                <SelectItem value="price-per-unit">📊 Price per Unit</SelectItem>
-                <SelectItem value="bulk-deals">📦 Bulk Deals</SelectItem>
-                <SelectItem value="recent-changes">🔄 Recently Updated</SelectItem>
-                <SelectItem value="nutriscore">🥗 Best Nutrition (Nutri-Score)</SelectItem>
-                <SelectItem value="nova-score">🌱 Least Processed (NOVA)</SelectItem>
-              </SelectContent>
-            </Select>
+              <Select onValueChange={(val: string) => setStore(val)}>
+                <SelectTrigger className="h-12 bg-white/80 backdrop-blur-sm border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <SelectValue placeholder="🏬 Filter by store" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lidl.es">Lidl</SelectItem>
+                  <SelectItem value="carrefour.es">Carrefour</SelectItem>
+                  <SelectItem value="aldi">Aldi</SelectItem>
+                  <SelectItem value="bonarea">BonÀrea</SelectItem>
+                  <SelectItem value="bonpreu">Bonpreu</SelectItem>
+                  <SelectItem value="condisline">Condisline</SelectItem>
+                  <SelectItem value="mercadona.es">Mercadona</SelectItem>
+                  <SelectItem value="El Corte Inglés">El Corte Inglés</SelectItem>
+                  <SelectItem value="alcampo">Alcampo</SelectItem>
+                  <SelectItem value="dia.es">Dia</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <Button
-              variant="outline"
-              onClick={() => setCompareMode(!compareMode)}
-              className={`${compareMode ? 'bg-blue-50' : ''}`}
-            >
-              {compareMode ? '🔍 Exit Compare' : '🔍 Compare Products'}
-            </Button>
+              <Select onValueChange={(val: string) => setSortBy(val as SortOption)}>
+                <SelectTrigger className="h-12 bg-white/80 backdrop-blur-sm border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <SelectValue placeholder="🔄 Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="price-asc">💰 Price: Low to High</SelectItem>
+                  <SelectItem value="price-desc">💎 Price: High to Low</SelectItem>
+                  <SelectItem value="name">📝 Name</SelectItem>
+                  <SelectItem value="best-value">⭐ Best Value</SelectItem>
+                  <SelectItem value="price-per-unit">📊 Price per Unit</SelectItem>
+                  <SelectItem value="bulk-deals">📦 Bulk Deals</SelectItem>
+                  <SelectItem value="recent-changes">🔄 Recently Updated</SelectItem>
+                  <SelectItem value="nutriscore">🥗 Best Nutrition (Nutri-Score)</SelectItem>
+                  <SelectItem value="nova-score">🌱 Least Processed (NOVA)</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <div className="col-span-2">
-              <label className="text-sm text-muted-foreground mb-1 block">
-                💶 Price Range (€{priceRange[0]} - €{priceRange[1]})
-              </label>
+              <Button
+                variant="outline"
+                onClick={() => setCompareMode(!compareMode)}
+                className={`h-12 bg-white/80 backdrop-blur-sm border-gray-300 shadow-lg hover:shadow-xl transition-all duration-200 ${
+                  compareMode ? 'bg-blue-50 border-blue-300 text-blue-700' : ''
+                }`}
+              >
+                {compareMode ? '🔍 Exit Compare' : '🔍 Compare Products'}
+              </Button>
+            </div>
+
+            {/* Enhanced Price Range Slider */}
+            <div className="mb-8 bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-gray-200">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-lg font-semibold text-gray-800">
+                  💶 Price Range
+                </label>
+                <span className="text-sm font-medium text-gray-600">
+                  €{priceRange[0]} - €{priceRange[1]}
+                </span>
+              </div>
               <Slider
                 defaultValue={[0, 100]}
                 min={0}
                 max={100}
                 step={1}
                 onValueChange={(val: number[]) => setPriceRange(val)}
+                className="w-full"
               />
             </div>
-          </div>
 
-          {/* Comparison View - Always visible in compare mode */}
-          {compareMode && (
-            <div className="mb-8 bg-white p-6 rounded-xl shadow-sm overflow-x-auto sticky top-0 z-20">
-              <h3 className="text-lg font-semibold mb-4">Product Comparison</h3>
-              {selectedProducts.size === 0 ? (
-                <div className="text-gray-500 text-center py-8">
-                  Select up to 4 products to compare.
+            {/* Enhanced Comparison View */}
+            {compareMode && (
+              <div className="mb-8 bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-gray-200 overflow-x-auto sticky top-0 z-20">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">Product Comparison</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExitCompare}
+                    className="text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Clear All
+                  </Button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {filtered
-                    .filter(p => selectedProducts.has(p.id))
-                    .map(product => (
-                      <div key={product.id} className="bg-gray-50 p-4 rounded-lg">
-                        <h4 className="font-medium">{product.name}</h4>
-                        <div className="mt-2 space-y-2 text-sm">
-                          <p>Price: {product.price !== null ? formatPrice(product.price) : 'N/A'}</p>
-                          <p>Category: {product.category}</p>
-                          <p>Store: {product.store_id}</p>
-                          <p>Quantity: {product.quantity}</p>
-                          {product.price && (
-                            <p>Value Score: {calculateValueScore(product.price, product.quantity, product.category).toFixed(0)}/100</p>
-                          )}
+                {selectedProducts.size === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-4">🔍</div>
+                    <p className="text-gray-500 text-lg">Select up to 4 products to compare their features and prices.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {filtered
+                      .filter(p => selectedProducts.has(p.id))
+                      .map(product => (
+                        <div key={product.id} className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 rounded-xl border border-gray-200">
+                          <h4 className="font-semibold text-gray-800 mb-3">{product.name}</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Price:</span>
+                              <span className="font-medium">{product.price !== null ? formatPrice(product.price) : 'N/A'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Category:</span>
+                              <span className="font-medium">{product.category}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Store:</span>
+                              <span className="font-medium">{product.store_id}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600">Quantity:</span>
+                              <span className="font-medium">{product.quantity}</span>
+                            </div>
+                            {product.price && (
+                              <div className="flex justify-between">
+                                <span className="text-gray-600">Value Score:</span>
+                                <span className="font-medium">{calculateValueScore(product.price, product.quantity, product.category).toFixed(0)}/100</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                </div>
-              )}
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Enhanced Product Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {filtered.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  onSelect={compareMode ? toggleProductSelection : undefined}
+                  isSelected={selectedProducts.has(product.id)}
+                  showComparison={compareMode}
+                />
+              ))}
             </div>
-          )}
 
-          {/* Product Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filtered.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onSelect={compareMode ? toggleProductSelection : undefined}
-                isSelected={selectedProducts.has(product.id)}
-                showComparison={compareMode}
-              />
-            ))}
+            {/* Enhanced Empty State */}
+            {filtered.length === 0 && (
+              <div className="text-center py-16">
+                <div className="text-6xl mb-6">🔍</div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-4">No matching products found</h3>
+                <p className="text-gray-600 text-lg mb-6">Try adjusting your filters or search terms to find what you're looking for.</p>
+                <Button
+                  onClick={() => {
+                    setSearch("");
+                    setStore("");
+                    setPriceRange([0.01, 100]);
+                  }}
+                  className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  Clear All Filters
+                </Button>
+              </div>
+            )}
+
+            {/* Product Count */}
+            {filtered.length > 0 && (
+              <div className="text-center mt-8 text-gray-600">
+                Showing {filtered.length} of {products.length} products
+              </div>
+            )}
+
+            <FloatingChatWidget />
           </div>
-
-          {filtered.length === 0 && (
-            <p className="text-center text-gray-500 mt-10">
-              ❌ No matching products found. Try adjusting your filters.
-            </p>
-          )}
-
-          <FloatingChatWidget />
         </div>
       </main>
     </>

@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Barcelona Product Scraper
 
 A Python script to enrich product data with nutritional information from OpenFoodFacts database.
@@ -68,6 +69,8 @@ The script will:
 
 This project is licensed under the MIT License - see the LICENSE file for details. 
 =======
+=======
+>>>>>>> 6df4e81d025231d9f999b43c3111e92217cf81c5
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
@@ -104,4 +107,8 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+<<<<<<< HEAD
 >>>>>>> 8890b4c4d0599f0730cfde4924933630aff82ee3
+=======
+"# Market_Product-1-" 
+>>>>>>> 6df4e81d025231d9f999b43c3111e92217cf81c5
