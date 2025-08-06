@@ -1,9 +1,16 @@
 import { OpenAI } from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export async function POST(request: NextRequest) {
+  // Check if OpenAI API key is configured
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ 
+      reply: 'Chat assistant is not configured. Please set up OpenAI API key.' 
+    }, { status: 500 });
+  }
+
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
   try {
     const { messages } = await request.json();
 
@@ -25,10 +32,13 @@ For all other questions, reply conversationally.`
     });
 
     const aiReply = completion.choices[0].message.content;
-    let reply = aiReply;
+    let reply = aiReply || 'Sorry, I couldn\'t generate a response.';
     
     // Try to parse JSON if present
     try {
+      if (!aiReply) {
+        throw new Error('No response from AI');
+      }
       const parsed = JSON.parse(aiReply);
       // Basic Supabase query using fetch (replace with your SDK)
       const params = new URLSearchParams();
