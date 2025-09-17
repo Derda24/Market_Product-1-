@@ -38,9 +38,16 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     const loadTranslations = async () => {
       try {
-        const response = await fetch(`/locales/${locale}/common.json`);
-        const data = await response.json();
-        setTranslations(data);
+        // Load fallback EN first
+        const enRes = await fetch(`/locales/en/common.json`, { cache: 'no-store' }).catch(() => null);
+        const enData = enRes ? await enRes.json().catch(() => ({})) : {};
+
+        // Then load selected locale
+        const res = await fetch(`/locales/${locale}/common.json`, { cache: 'no-store' }).catch(() => null);
+        const localeData = res ? await res.json().catch(() => ({})) : {};
+
+        // Merge fallback + locale (locale overrides)
+        setTranslations({ ...enData, ...localeData });
         setLoading(false);
       } catch (error) {
         console.error('Error loading translations:', error);
