@@ -1,0 +1,22 @@
+[
+  { "id": 1, "name": "Madrid", "region": "Comunidad de Madrid", "latitude": 40.416775, "longitude": -3.70379, "population": 3223000 },
+  { "id": 2, "name": "Barcelona", "region": "Cataluña", "latitude": 41.3874, "longitude": 2.1686, "population": 1620000 },
+  { "id": 3, "name": "Valencia", "region": "Comunidad Valenciana", "latitude": 39.4699, "longitude": -0.3763, "population": 791000 },
+  { "id": 4, "name": "Sevilla", "region": "Andalucía", "latitude": 37.3891, "longitude": -5.9845, "population": 688000 },
+  { "id": 5, "name": "Zaragoza", "region": "Aragón", "latitude": 41.6497, "longitude": -0.8891, "population": 681000 },
+  { "id": 6, "name": "Málaga", "region": "Andalucía", "latitude": 36.7213, "longitude": -4.4213, "population": 578000 },
+  { "id": 7, "name": "Murcia", "region": "Región de Murcia", "latitude": 37.9922, "longitude": -1.1307, "population": 460000 },
+  { "id": 8, "name": "Palma", "region": "Islas Baleares", "latitude": 39.5696, "longitude": 2.6502, "population": 409000 },
+  { "id": 9, "name": "Las Palmas", "region": "Canarias", "latitude": 28.1235, "longitude": -15.4363, "population": 380000 },
+  { "id": 10, "name": "Bilbao", "region": "País Vasco", "latitude": 43.263, "longitude": -2.935, "population": 345000 },
+  { "id": 11, "name": "Alicante", "region": "Comunidad Valenciana", "latitude": 38.3452, "longitude": -0.481, "population": 337000 },
+  { "id": 12, "name": "Córdoba", "region": "Andalucía", "latitude": 37.8882, "longitude": -4.7794, "population": 326000 },
+  { "id": 13, "name": "Valladolid", "region": "Castilla y León", "latitude": 41.6523, "longitude": -4.7245, "population": 299000 },
+  { "id": 14, "name": "Vigo", "region": "Galicia", "latitude": 42.2406, "longitude": -8.7207, "population": 295000 },
+  { "id": 15, "name": "Gijón", "region": "Asturias", "latitude": 43.542, "longitude": -5.664, "population": 271000 },
+  { "id": 16, "name": "L'Hospitalet de Llobregat", "region": "Cataluña", "latitude": 41.3662, "longitude": 2.1164, "population": 264000 },
+  { "id": 17, "name": "A Coruña", "region": "Galicia", "latitude": 43.3623, "longitude": -8.4115, "population": 246000 },
+  { "id": 18, "name": "Granada", "region": "Andalucía", "latitude": 37.1773, "longitude": -3.5986, "population": 232000 },
+  { "id": 19, "name": "Elche", "region": "Comunidad Valenciana", "latitude": 38.2699, "longitude": -0.7126, "population": 234000 },
+  { "id": 20, "name": "Oviedo", "region": "Asturias", "latitude": 43.3619, "longitude": -5.8494, "population": 220000 }
+]
