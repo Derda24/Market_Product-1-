@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    optimizeCss: true,
-  },
   images: {
     domains: ['images.unsplash.com', 'via.placeholder.com'],
     formats: ['image/webp', 'image/avif'],
@@ -12,12 +9,11 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,
-  swcMinify: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Performance optimizations
   experimental: {
+    optimizeCss: true,
     optimizePackageImports: ['@radix-ui/react-icons', 'lucide-react'],
   },
   // Reduce bundle size
@@ -36,4 +32,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig; 
+module.exports = nextConfig;
