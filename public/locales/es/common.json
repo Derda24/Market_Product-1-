@@ -1,0 +1,74 @@
+{
+  "header": {
+    "title": "Market Explorer",
+    "titleGeneric": "Explorador de mercados en España",
+    "subtitle": "Encuentra los mejores precios en supermercados de tu ciudad",
+    "subtitleGeneric": "Encuentra los mejores precios en supermercados de tu ciudad",
+    "searchPlaceholder": "Buscar productos...",
+    "filterByStore": "Filtrar por tienda",
+    "priceRange": "Rango de precios",
+    "allStores": "Todas las tiendas"
+  },
+  "cities": {
+    "searchPlaceholder": "Buscar ciudad"
+  },
+  "filters": {
+    "search": "Buscar productos",
+    "store": "Tienda",
+    "priceRange": "Rango de precios",
+    "minPrice": "Precio mínimo",
+    "maxPrice": "Precio máximo",
+    "applyFilters": "Aplicar filtros",
+    "clearFilters": "Limpiar filtros"
+  },
+  "products": {
+    "loading": "Cargando productos...",
+    "noProducts": "No se encontraron productos",
+    "loadMore": "Cargar más productos",
+    "showing": "Mostrando",
+    "of": "de",
+    "products": "productos",
+    "pricePerUnit": "por unidad",
+    "addToComparison": "Añadir a comparación",
+    "removeFromComparison": "Quitar de comparación",
+    "viewComparison": "Ver comparación",
+    "clearComparison": "Limpiar comparación"
+  },
+  "productCard": {
+    "store": "Tienda",
+    "price": "Precio",
+    "quantity": "Cantidad",
+    "category": "Categoría",
+    "nutritionFacts": "Información nutricional",
+    "addToComparison": "Comparar",
+    "removeFromComparison": "Quitar",
+    "nutritionPer100g": "Nutrición por 100g",
+    "energy": "Energía",
+    "sugars": "Azúcares",
+    "salt": "Sal",
+    "satFat": "Grasa sat.",
+    "nutriScore": "Nutri-Score",
+    "novaGroup": "Grupo NOVA",
+    "novaInfo": "Clasificación del procesamiento de alimentos",
+    "priceUnavailable": "Precio no disponible",
+    "refreshPriceHistory": "Actualizar historial de precios",
+    "viewPriceHistory": "Ver historial de precios"
+  },
+  "comparison": {
+    "title": "Comparación de productos",
+    "close": "Cerrar",
+    "noProducts": "No hay productos para comparar",
+    "addProducts": "Añade productos para comparar"
+  },
+  "footer": {
+    "about": "Acerca de",
+    "contact": "Contacto",
+    "privacy": "Privacidad",
+    "terms": "Términos"
+  },
+  "language": {
+    "switch": "Cambiar idioma",
+    "spanish": "Español",
+    "english": "English"
+  }
+}

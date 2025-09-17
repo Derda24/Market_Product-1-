@@ -1,0 +1,74 @@
+{
+  "header": {
+    "title": "Market Explorer",
+    "titleGeneric": "Spain Market Explorer",
+    "subtitle": "Find the best prices across supermarkets in your city",
+    "subtitleGeneric": "Find the best prices across supermarkets in your city",
+    "searchPlaceholder": "Search products...",
+    "filterByStore": "Filter by store",
+    "priceRange": "Price range",
+    "allStores": "All stores"
+  },
+  "cities": {
+    "searchPlaceholder": "Search city"
+  },
+  "filters": {
+    "search": "Search products",
+    "store": "Store",
+    "priceRange": "Price range",
+    "minPrice": "Min price",
+    "maxPrice": "Max price",
+    "applyFilters": "Apply filters",
+    "clearFilters": "Clear filters"
+  },
+  "products": {
+    "loading": "Loading products...",
+    "noProducts": "No products found",
+    "loadMore": "Load more products",
+    "showing": "Showing",
+    "of": "of",
+    "products": "products",
+    "pricePerUnit": "per unit",
+    "addToComparison": "Add to comparison",
+    "removeFromComparison": "Remove from comparison",
+    "viewComparison": "View comparison",
+    "clearComparison": "Clear comparison"
+  },
+  "productCard": {
+    "store": "Store",
+    "price": "Price",
+    "quantity": "Quantity",
+    "category": "Category",
+    "nutritionFacts": "Nutrition facts",
+    "addToComparison": "Compare",
+    "removeFromComparison": "Remove",
+    "nutritionPer100g": "Nutrition per 100g",
+    "energy": "Energy",
+    "sugars": "Sugars",
+    "salt": "Salt",
+    "satFat": "Sat. Fat",
+    "nutriScore": "Nutri-Score",
+    "novaGroup": "NOVA Group",
+    "novaInfo": "Food processing classification",
+    "priceUnavailable": "Price not available",
+    "refreshPriceHistory": "Refresh Price History",
+    "viewPriceHistory": "View Price History"
+  },
+  "comparison": {
+    "title": "Product comparison",
+    "close": "Close",
+    "noProducts": "No products to compare",
+    "addProducts": "Add products to compare"
+  },
+  "footer": {
+    "about": "About",
+    "contact": "Contact",
+    "privacy": "Privacy",
+    "terms": "Terms"
+  },
+  "language": {
+    "switch": "Switch language",
+    "spanish": "Español",
+    "english": "English"
+  }
+}
