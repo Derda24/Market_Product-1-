@@ -2,322 +2,247 @@ import time
 import datetime
 import json
 import re
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 from utils.db import insert_product, get_product_by_name_and_store, update_product_price, supabase
 from utils.logger import log_debug_message as log
 import os
 from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
-import asyncio
 
 # Load environment variables
 load_dotenv()
 
 BASE_URL = "https://www.compraonline.bonpreuesclat.cat"
 
-print("🚀 Bonpreu scraper starting...")
+print("START Bonpreu scraper starting...")
 
 # Test Supabase connection at startup
-print("🔄 Checking Supabase connection...")
+print("RETRY Checking Supabase connection...")
 try:
     test = supabase.table("products").select("count").limit(1).execute()
-    print("✅ Supabase connection successful")
+    print("SUCCESS Supabase connection successful")
 except Exception as e:
-    print(f"❌ Supabase connection failed: {str(e)}")
+    print(f"ERROR Supabase connection failed: {str(e)}")
     print("Please check your .env file contains valid SUPABASE_URL and SUPABASE_KEY")
     exit(1)
 
 def save_debug_html(html, filename="bonpreu_debug.html"):
     with open(filename, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"✅ HTML saved as {filename}")
+    print(f"SUCCESS HTML saved as {filename}")
 
-async def get_all_categories(page):
-    """Extract all category URLs from the main page"""
-    print("🔍 Extracting all categories...")
-    await page.goto(BASE_URL, timeout=60000)
-    await page.wait_for_load_state('networkidle')
-    
-    html = await page.content()
-    save_debug_html(html, "bonpreu_main_page.html")
-    
-    soup = BeautifulSoup(html, "html.parser")
-    categories = set()
-    
-    # Look for category links
-    for link in soup.find_all("a", href=True):
-        href = link.get("href", "")
-        if "/categories/" in href and href.startswith("/"):
-            full_url = BASE_URL + href
-            categories.add(full_url)
-    
-    print(f"📂 Found {len(categories)} categories")
-    return list(categories)
-
-async def get_product_links_from_category(page, category_url):
-    """Get all product links from a category page"""
+def extract_bonpreu_products(page, category):
+    """Extract products from Bonpreu main page"""
     try:
-        print(f"🔗 Visiting category: {category_url}")
-        await page.goto(category_url, timeout=30000)
-        await page.wait_for_load_state('networkidle')
-        
-        # Wait a bit for dynamic content to load
-        await page.wait_for_timeout(3000)
-        
-        html = await page.content()
-        soup = BeautifulSoup(html, "html.parser")
-        
-        # Method 1: Try to find product cards
-        product_elements = await page.query_selector_all("a[data-test='product-card-name']")
-        links = []
-        for el in product_elements:
-            href = await el.get_attribute("href")
-            if href:
-                full_url = BASE_URL + href if href.startswith("/") else href
-                links.append(full_url)
-        
-        # Method 2: Extract from structured data if no products found
-        if not links:
-            print("   🔍 No product cards found, checking structured data...")
-            structured_data = soup.find("script", {"data-test": "product-listing-structured-data"})
-            if structured_data:
-                try:
-                    data = json.loads(structured_data.string)
-                    if "itemListElement" in data:
-                        for item in data["itemListElement"]:
-                            if "url" in item:
-                                links.append(item["url"])
-                        print(f"   📦 Found {len(links)} products from structured data")
-                except Exception as e:
-                    print(f"   ⚠️ Error parsing structured data: {e}")
-        
-        # Method 3: Look for any product links in the HTML
-        if not links:
-            print("   🔍 Looking for product links in HTML...")
-            for link in soup.find_all("a", href=True):
-                href = link.get("href", "")
-                if "/products/" in href and href.startswith("/"):
-                    full_url = BASE_URL + href
-                    links.append(full_url)
-        
-        print(f"   📦 Found {len(links)} products")
-        return links
-        
+        # Wait for React app to load
+        page.wait_for_selector('div[data-test="product-grid"]', timeout=20000)
     except Exception as e:
-        print(f"❌ Error getting products from {category_url}: {e}")
+        print(f"WARN Error waiting for product grid: {e}")
+        # Try alternative selectors
+        try:
+            page.wait_for_selector('[data-test="product-card"]', timeout=15000)
+        except Exception:
+            try:
+                page.wait_for_selector('.product-card', timeout=10000)
+            except Exception:
+                try:
+                    page.wait_for_selector('[class*="product"]', timeout=10000)
+                except Exception:
+                    print("WARN All product selectors failed")
+
+    # Find all product elements - try multiple selectors
+    product_elements = page.query_selector_all('[data-test="product-card"]')
+    if not product_elements:
+        product_elements = page.query_selector_all('.product-card')
+    if not product_elements:
+        product_elements = page.query_selector_all('[class*="product"]')
+    if not product_elements:
+        product_elements = page.query_selector_all('[class*="Product"]')
+    if not product_elements:
+        product_elements = page.query_selector_all('article')
+    if not product_elements:
+        product_elements = page.query_selector_all('div[role="article"]')
+    
+    if not product_elements:
+        print("ERROR No product elements found")
+        page.screenshot(path="bonpreu_debug.png", full_page=True)
+        with open("bonpreu_debug.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+        print("📸 Screenshot saved to bonpreu_debug.png, HTML saved to bonpreu_debug.html")
         return []
 
-async def scrape_product_details(page, product_url):
-    """Extract product details from a product page"""
-    try:
-        await page.goto(product_url, timeout=30000)
-        await page.wait_for_load_state('networkidle')
-        
-        # Wait a bit for dynamic content to load
-        await page.wait_for_timeout(2000)
-        
-        # Try multiple selectors for product title
-        title_selectors = [
-            "[data-test='product-title']",
-            "h1",
-            ".product-title",
-            ".product-name",
-            "h1[data-test]",
-            "[data-test*='title']"
-        ]
-        
-        name_elem = None
-        for selector in title_selectors:
-            try:
-                name_elem = await page.query_selector(selector)
-                if name_elem:
-                    break
-            except:
-                continue
-        
-        if not name_elem:
-            # Save debug HTML for this product page
-            html = await page.content()
-            debug_filename = f"bonpreu_product_debug_{product_url.split('/')[-1]}.html"
-            save_debug_html(html, debug_filename)
-            print(f"⚠️ Product title not found for {product_url}")
-            print(f"   💾 Saved debug HTML as {debug_filename}")
-            return None
-        
-        # Try multiple selectors for price
-        price_selectors = [
-            "[data-test='product-price']",
-            ".price",
-            ".product-price",
-            "[data-test*='price']",
-            ".price-value"
-        ]
-        
-        price_elem = None
-        for selector in price_selectors:
-            try:
-                price_elem = await page.query_selector(selector)
-                if price_elem:
-                    break
-            except:
-                continue
-        
-        # Try multiple selectors for quantity
-        quantity_selectors = [
-            "[data-test='product-quantity']",
-            ".quantity",
-            ".product-quantity",
-            "[data-test*='quantity']",
-            ".weight"
-        ]
-        
-        quantity_elem = None
-        for selector in quantity_selectors:
-            try:
-                quantity_elem = await page.query_selector(selector)
-                if quantity_elem:
-                    break
-            except:
-                continue
-        
-        if not name_elem or not price_elem:
-            print(f"⚠️ Missing name or price for {product_url}")
-            return None
-        
-        name = await name_elem.inner_text()
-        price_text = await price_elem.inner_text()
-        quantity = await quantity_elem.inner_text() if quantity_elem else ""
-        
-        # Clean price - handle different formats
-        try:
-            # Remove currency symbols and clean up
-            price_clean = price_text.replace("€", "").replace(",", ".").strip()
-            # Extract first number from the text
-            price_match = re.search(r'[\d,]+\.?\d*', price_clean)
-            if price_match:
-                price_clean = price_match.group().replace(",", ".")
-            clean_price = float(price_clean)
-        except ValueError:
-            print(f"⚠️ Invalid price format: {price_text}")
-            return None
-        
-        return {
-            "name": name.strip(),
-            "price": clean_price,
-            "quantity": quantity.strip(),
-            "url": product_url
-        }
-        
-    except Exception as e:
-        print(f"❌ Error extracting product from {product_url}: {e}")
-        return None
+    print(f"🔎 Found {len(product_elements)} products.")
 
-async def process_product(product_data, category_name):
-    """Process a single product - check if exists, update or insert"""
-    name = product_data["name"]
-    price = product_data["price"]
-    quantity = product_data["quantity"]
-    
-    print(f"   ✨ Processing: {name}")
-    
-    # Check if product already exists
-    existing_product = get_product_by_name_and_store(name, "bonpreu")
-    
-    if existing_product:
-        if existing_product['price'] != price:
-            update_product_price(existing_product['id'], price, store_id="bonpreu")
-            print(f"   🔄 Updated price for {name}: {existing_product['price']}€ → {price}€")
-            return "updated"
-        else:
-            print(f"   ⏭️ No changes for {name}")
-            return "skipped"
-    else:
+    results = []
+    for i, el in enumerate(product_elements, 1):
         try:
-        insert_product(
-            name=name,
-                price=price,
-                category=category_name,
-            store_id="bonpreu",
-            quantity=quantity
-        )
-            print(f"   ✅ Added: {name} - {price}€ {quantity}")
-            return "inserted"
-        except Exception as e:
-            print(f"   ❌ Failed to insert product: {str(e)}")
-            return "error"
+            # Extract product name - try multiple selectors
+            name_el = el.query_selector('[data-test="product-card-name"]') or \
+                     el.query_selector('[data-test="product-name"]') or \
+                     el.query_selector('.product-name') or \
+                     el.query_selector('.product-title') or \
+                     el.query_selector('h3') or \
+                     el.query_selector('h2') or \
+                     el.query_selector('a') or \
+                     el.query_selector('[class*="name"]') or \
+                     el.query_selector('[class*="title"]')
+            
+            if not name_el:
+                print(f"WARN Skipped product {i}: Could not find name")
+                continue
+            name = name_el.inner_text().strip()
+            
+            if not name:
+                print(f"WARN Skipped product {i}: Empty name")
+                continue
 
-async def scrape_bonpreu_products():
-    """Main scraping function for Bonpreu"""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
-        page = await context.new_page()
-        
-        try:
-            # Get all categories
-            categories = await get_all_categories(page)
+            # Extract price - try multiple selectors
+            price_el = el.query_selector('[data-test="product-card-price"]') or \
+                      el.query_selector('[data-test="product-price"]') or \
+                      el.query_selector('.product-price') or \
+                      el.query_selector('[class*="price"]') or \
+                      el.query_selector('span[class*="Price"]') or \
+                      el.query_selector('[class*="cost"]') or \
+                      el.query_selector('[class*="Price"]')
             
-            total_inserted = 0
-            total_updated = 0
-            total_skipped = 0
-            total_errors = 0
-            
-            for idx, category_url in enumerate(categories, 1):
-                print(f"\n[{idx}/{len(categories)}] Processing category: {category_url}")
+            if not price_el:
+                print(f"WARN Skipped product {i}: Could not find price")
+                continue
                 
-                # Extract category name from URL
-                category_name = category_url.split("/")[-1] if "/" in category_url else "unknown"
-                
-                # Get product links from this category
-                product_urls = await get_product_links_from_category(page, category_url)
-                
-                if not product_urls:
-                    print(f"   ⚠️ No products found in category")
+            price_text = price_el.inner_text().strip()
+            try:
+                # Extract numeric value from price text
+                import re
+                price_match = re.search(r'(\d+[.,]\d+|\d+)', price_text.replace(',', '.'))
+                if price_match:
+                    price = float(price_match.group(1).replace(',', '.'))
+                else:
+                    print(f"WARN Skipped product {i}: Invalid price format")
                     continue
+            except ValueError:
+                print(f"WARN Skipped product {i}: Could not parse price")
+                continue
+
+            # Extract quantity (if available)
+            quantity_el = el.query_selector('.product-quantity') or \
+                         el.query_selector('[class*="quantity"]') or \
+                         el.query_selector('[class*="weight"]')
+            quantity = quantity_el.inner_text().strip() if quantity_el else "1 unit"
+
+            results.append({
+                "name": name,
+                "price": price,
+                "quantity": quantity,
+                "category": category,
+            })
+        except Exception as e:
+            print(f"WARN Error processing product {i}: {e}")
+    return results
+
+def scrape_bonpreu():
+    print("START Starting Bonpreu scraper...")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800}
+        )
+
+        try:
+            print("GLOBE Visiting Bonpreu homepage...")
+            page.goto(BASE_URL, timeout=60000)
+            time.sleep(3)
+            print("Current URL:", page.url)
+
+            # Handle cookie popup if present
+            try:
+                cookie_button = page.query_selector('button:has-text("Acceptar")') or \
+                               page.query_selector('button:has-text("Aceptar")') or \
+                               page.query_selector('button:has-text("Accept")') or \
+                               page.query_selector('#onetrust-accept-btn-handler')
+                if cookie_button:
+                    cookie_button.click()
+                    print("COOKIE Cookie popup accepted")
+                    time.sleep(2)
+            except Exception:
+                print("WARN Cookie popup not found or already accepted.")
+
+            # Try to navigate to a product category
+            try:
+                # Look for category links
+                category_links = page.query_selector_all('a[href*="/categories/"]')
+                if category_links:
+                    print("LINK Found category links, clicking first one...")
+                    category_links[0].click()
+                    time.sleep(3)
+                    print("Current URL after category click:", page.url)
+                else:
+                    print("WARN No category links found, staying on homepage")
+            except Exception as e:
+                print(f"WARN Error navigating to category: {e}")
+
+            # Scroll to load more products
+            print("SCROLL Scrolling to load products...")
+            for i in range(15):
+                page.mouse.wheel(0, 1000)
+                time.sleep(0.5)
                 
-                # Process each product
-                for i, product_url in enumerate(product_urls, 1):
-                    print(f"   [{i}/{len(product_urls)}] Fetching product details...")
-                    
-                    product_data = await scrape_product_details(page, product_url)
-                    if product_data:
-                        result = await process_product(product_data, category_name)
-                        if result == "inserted":
-                            total_inserted += 1
-                        elif result == "updated":
-                            total_updated += 1
-                        elif result == "skipped":
-                            total_skipped += 1
+                # Check if more products loaded
+                current_products = page.query_selector_all('[data-test="product-card"]')
+                if not current_products:
+                    current_products = page.query_selector_all('.product-card')
+                if not current_products:
+                    current_products = page.query_selector_all('.product-item')
+                if i % 5 == 0:
+                    print(f"CHART Found {len(current_products)} products so far...")
+
+            # Wait for any remaining dynamic content
+            print("WAIT Waiting for dynamic content to load...")
+            page.wait_for_timeout(5000)
+            
+            # Final scroll to bottom to ensure everything is loaded
+            page.mouse.wheel(0, 2000)
+            time.sleep(2)
+
+            page.wait_for_timeout(3000)
+            page.screenshot(path="bonpreu_debug.png", full_page=True)
+
+            products = extract_bonpreu_products(page, "general")
+            if not products:
+                print("ERROR No products found.")
+                return
+
+            print(f"BOX Processing {len(products)} products...")
+            for i, product in enumerate(products, 1):
+                try:
+                    existing_product = get_product_by_name_and_store(product["name"], "bonpreu")
+                    if existing_product:
+                        if existing_product['price'] != product["price"]:
+                            print(f"RETRY [{i}] Price updated: {product['name']} {existing_product['price']}€ → {product['price']}€")
+                            update_product_price(existing_product['id'], product["price"])
                         else:
-                            total_errors += 1
+                            print(f"SKIP [{i}] No change: {product['name']}")
                     else:
-                        total_errors += 1
-                
-                print(f"   📊 Category summary:")
-                print(f"      Products found: {len(product_urls)}")
-                print(f"      Products processed: {len(product_urls)}")
-            
-            print("\n🎉 Bonpreu scraping completed!")
-            print(f"   Total products added: {total_inserted}")
-            print(f"   Total products updated: {total_updated}")
-            print(f"   Total products skipped: {total_skipped}")
-            print(f"   Total errors: {total_errors}")
-            
+                        insert_product(product["name"], product["price"], product["category"], "bonpreu", product["quantity"])
+                        print(f"SUCCESS [{i}] Inserted: {product['name']} — {product['price']}€ ({product['quantity']})")
+                except Exception as e:
+                    print(f"ERROR DB error on product {i}: {e}")
+
+        except Exception as e:
+            print(f"ERROR Scraping failed: {e}")
         finally:
-            await browser.close()
+            browser.close()
+            print("FINISH Scraper finished.")
 
 if __name__ == "__main__":
     # Verify Playwright installation
-    print("🔍 Checking required packages...")
+    print("SEARCH Checking required packages...")
     try:
         import playwright
-        print("✅ Playwright is installed")
+        print("SUCCESS Playwright is installed")
     except ImportError:
-        print("❌ Playwright is not installed")
-        print("📦 Please run: pip install playwright")
-        print("🎭 Then run: playwright install")
+        print("ERROR Playwright is not installed")
+        print("BOX Please run: pip install playwright")
+        print("THEATER Then run: playwright install")
         exit(1)
 
-    # Run the scraper
-    asyncio.run(scrape_bonpreu_products())
+    scrape_bonpreu()

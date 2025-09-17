@@ -11,6 +11,7 @@ import { getPriceHistory, PriceAnalytics } from '@/lib/priceTracking';
 import { calculatePriceMetrics, formatPrice } from '@/lib/priceUtils';
 import { shouldUseImageFallback, generateFallbackImage } from '@/utils/imageQuality';
 import type { Product, ProductCardProps } from '@/app/types';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Store name mapping with brand colors
 const STORE_NAMES: { [key: string]: { name: string; color: string; bgColor: string } } = {
@@ -52,6 +53,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
   isSelected, 
   showComparison 
 }) => {
+  const { t } = useTranslation();
   const [priceAnalytics, setPriceAnalytics] = useState<PriceAnalytics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -188,6 +190,11 @@ const ProductCard: React.FC<ProductCardProps> = ({
             <span className={`inline-block ${storeInfo.bgColor} ${storeInfo.color} text-xs font-semibold px-3 py-1.5 rounded-full`}>
               {storeInfo.name}
             </span>
+            {product.city && (
+              <span className="inline-block bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-200">
+                🗺️ {product.city}
+              </span>
+            )}
             
             {/* Nutrition badges */}
             <div className="flex gap-2">
@@ -200,7 +207,7 @@ const ProductCard: React.FC<ProductCardProps> = ({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Nutri-Score: {product.nutriscore.toUpperCase()}</p>
+                      <p>{t('productCard.nutriScore')}: {product.nutriscore.toUpperCase()}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -215,8 +222,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>NOVA Group: {product.nova_group}</p>
-                      <p className="text-xs">Food processing classification</p>
+                      <p>{t('productCard.novaGroup')}: {product.nova_group}</p>
+                      <p className="text-xs">{t('productCard.novaInfo')}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -250,30 +257,30 @@ const ProductCard: React.FC<ProductCardProps> = ({
           {(product.energy_kcal || product.sugars_100g || product.salt_100g || product.saturated_fat_100g) && (
             <div className="mt-3 p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
               <div className="text-xs font-bold text-gray-700 mb-2 flex items-center gap-1">
-                <span>🥗</span> Nutrition per 100g
+                <span>🥗</span> {t('productCard.nutritionPer100g')}
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {product.energy_kcal && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Energy:</span>
+                    <span className="text-gray-600">{t('productCard.energy')}:</span>
                     <span className="font-medium">{product.energy_kcal}kcal</span>
                   </div>
                 )}
                 {product.sugars_100g && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Sugars:</span>
+                    <span className="text-gray-600">{t('productCard.sugars')}:</span>
                     <span className="font-medium">{product.sugars_100g}g</span>
                   </div>
                 )}
                 {product.salt_100g && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Salt:</span>
+                    <span className="text-gray-600">{t('productCard.salt')}:</span>
                     <span className="font-medium">{product.salt_100g}g</span>
                   </div>
                 )}
                 {product.saturated_fat_100g && (
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Sat. Fat:</span>
+                    <span className="text-gray-600">{t('productCard.satFat')}:</span>
                     <span className="font-medium">{product.saturated_fat_100g}g</span>
                   </div>
                 )}
@@ -298,14 +305,14 @@ const ProductCard: React.FC<ProductCardProps> = ({
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Loading...
+                {t('products.loading')}
               </div>
             ) : !product.price ? (
-              'Price not available'
+              t('productCard.priceUnavailable')
             ) : priceAnalytics ? (
-              'Refresh Price History'
+              t('productCard.refreshPriceHistory')
             ) : (
-              'View Price History'
+              t('productCard.viewPriceHistory')
             )}
           </Button>
         </div>

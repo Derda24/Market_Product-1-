@@ -1,211 +1,254 @@
 import time
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
-from utils.db import insert_product
-from utils.logger import log_debug_message as log  # Fixed import
-from playwright.async_api import async_playwright
-# Try to import stealth, fallback to no stealth if not available
-try:
-    from playwright_stealth import stealth_async as stealth
-except ImportError:
-    try:
-        from playwright_stealth import stealth
-    except ImportError:
-        stealth = None
+import re
+from playwright.sync_api import sync_playwright
+from utils.db import insert_product, get_product_by_name_and_store, update_product_price, supabase
+from utils.logger import log_debug_message as log
 
-BASE_URL = "https://www.elcorteingles.es/supermercado/despensa"
+BASE_URL = "https://www.elcorteingles.es/supermercado"
 
-print("🚀 Script starting...")
-log("Script starting...")  # Added logging
+print("START El Corte Inglés scraper starting...")
 
 # Test Supabase connection at startup
-print("🔄 Checking database connection...")
-log("Checking database connection...")
+print("RETRY Checking Supabase connection...")
+try:
+    test = supabase.table("products").select("count").limit(1).execute()
+    print("SUCCESS Supabase connection successful")
+except Exception as e:
+    print(f"ERROR Supabase connection failed: {str(e)}")
+    print("Please check your .env file contains valid SUPABASE_URL and SUPABASE_KEY")
+    exit(1)
 
-CATEGORIES = [
-    'arroz-legumbres-y-pasta',
-    'conservas',
-    'pan-y-reposteria',
-    'aceites-y-vinagres',
-    'azucar-cacao-y-edulcorantes',
-    'salsas-condimentos-y-especias'
-]
+def save_debug_html(html, filename="elcorte_debug.html"):
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"SUCCESS HTML saved as {filename}")
 
-REALISTIC_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-ACCEPT_LANGUAGE = "es-ES,es;q=0.9"
-
-async def get_browser_and_page():
-    playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch(headless=False)
-    context = await browser.new_context(
-        user_agent=REALISTIC_UA,
-        locale="es-ES",
-        extra_http_headers={
-            "User-Agent": REALISTIC_UA,
-            "Accept-Language": ACCEPT_LANGUAGE,
-        },
-    )
-    page = await context.new_page()
-    if stealth:
-        await stealth(page)
-    return browser, page
-
-def extract_product_data(page, category_slug):
-    print(f"\n📦 Processing category: {category_slug}")
-    log(f"Processing category: {category_slug}")
-    cards = page.query_selector_all(".product-card")
-    print(f"🔎 Found {len(cards)} product(s)")
-    log(f"Found {len(cards)} product(s)")
-
-    if not cards:
-        print("❌ No products found in this category")
-        log("No products found in this category")
-        return False
-
-    inserted_count = 0
-    total_count = len(cards)
-    current_count = 0
-
-    for card in cards:
-        current_count += 1
+def extract_elcorte_products(page, category):
+    """Extract products from El Corte Inglés main page"""
+    try:
+        # Wait for products to load
+        page.wait_for_selector('.product-card', timeout=15000)
+    except Exception as e:
+        print(f"WARN Error waiting for products: {e}")
+        # Try alternative selectors
         try:
-            name_elem = card.query_selector(".product-card__title")
-            price_elem = card.query_selector(".price")
-            weight_elem = card.query_selector(".product-card__description")
-
-            if not name_elem or not price_elem:
-                print("⚠️ Missing name or price element, skipping product")
-                log("Missing name or price element, skipping product")
-                continue
-
-            name = name_elem.inner_text().strip()
-            price_text = price_elem.inner_text().strip().replace("\u20ac", "").replace("€", "").strip()
+            page.wait_for_selector('[data-test="product-card"]', timeout=10000)
+        except Exception:
             try:
-                # Handle price format (remove currency symbol and convert to float)
-                price_text = price_text.replace(",", ".")
-                price = float(price_text)
-            except ValueError:
-                print(f"⚠️ Invalid price format for {name}: {price_text}")
-                log(f"Invalid price format for {name}: {price_text}")
-                continue
+                page.wait_for_selector('[class*="product"]', timeout=10000)
+            except Exception:
+                print("WARN All product selectors failed")
 
-            weight = weight_elem.inner_text().strip() if weight_elem else ""
-
-            # Progress indicator
-            print(f"\n[{current_count}/{total_count}] ✨ Adding: {name}")
-            log(f"Adding: {name}")
-
-            try:
-                insert_product(
-                    name=name,
-                    price=price,
-                    category=category_slug,
-                    store_id="elcorteingles",
-                    quantity=weight
-                )
-                inserted_count += 1
-                print(f"✅ Added: {name} - {price}€ {weight}")
-                log(f"Added: {name} - {price}€ {weight}")
-            except Exception as e:
-                print(f"❌ Failed to insert product: {str(e)}")
-                log(f"Failed to insert product: {str(e)}")
-
-        except Exception as e:
-            print(f"❌ Error processing product: {str(e)}")
-            log(f"Error processing product: {str(e)}")
-            continue
-
-    print(f"\n📊 Category summary for {category_slug}:")
-    print(f"   Total products found: {total_count}")
-    print(f"   Products added: {inserted_count}")
-    log(f"Category {category_slug} summary - Total: {total_count}, Added: {inserted_count}")
+    # Find all product elements
+    product_elements = page.query_selector_all('.product-card')
+    if not product_elements:
+        product_elements = page.query_selector_all('[data-test="product-card"]')
+    if not product_elements:
+        product_elements = page.query_selector_all('[class*="product"]')
+    if not product_elements:
+        product_elements = page.query_selector_all('article')
     
-    return True
+    if not product_elements:
+        print("ERROR No product elements found")
+        page.screenshot(path="elcorte_debug.png", full_page=True)
+        with open("elcorte_debug.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+        print("📸 Screenshot saved to elcorte_debug.png, HTML saved to elcorte_debug.html")
+        return []
 
-def scrape_category(category_slug):
-    print(f"\n🎯 Starting category: {category_slug}")
-    print(f"🌐 Base URL: {BASE_URL}/{category_slug}")
-    log(f"Starting category: {category_slug}")
+    print(f"🔎 Found {len(product_elements)} products.")
 
-    with sync_playwright() as p:
+    results = []
+    for i, el in enumerate(product_elements, 1):
         try:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context()
-            page = context.new_page()
+            # Extract product name
+            name_el = el.query_selector('.product-card__title') or \
+                     el.query_selector('[data-test="product-title"]') or \
+                     el.query_selector('.product-title') or \
+                     el.query_selector('.product-name') or \
+                     el.query_selector('h3') or \
+                     el.query_selector('h2') or \
+                     el.query_selector('a')
+            
+            if not name_el:
+                print(f"WARN Skipped product {i}: Could not find name")
+                continue
+            name = name_el.inner_text().strip()
+            
+            if not name:
+                print(f"WARN Skipped product {i}: Empty name")
+                continue
 
-            page_num = 1
-            while True:
-                paged_url = f"{BASE_URL}/{category_slug}/?page={page_num}"
+            # Extract price
+            price_el = el.query_selector('.price') or \
+                      el.query_selector('[data-test="product-price"]') or \
+                      el.query_selector('.product-price') or \
+                      el.query_selector('[class*="price"]') or \
+                      el.query_selector('span[class*="Price"]') or \
+                      el.query_selector('[class*="cost"]')
+            
+            if not price_el:
+                print(f"WARN Skipped product {i}: Could not find price")
+                continue
+                
+            price_text = price_el.inner_text().strip()
+            try:
+                # Extract numeric value from price text
+                price_match = re.search(r'(\d+[.,]\d+|\d+)', price_text.replace(',', '.'))
+                if price_match:
+                    price = float(price_match.group(1).replace(',', '.'))
+                else:
+                    print(f"WARN Skipped product {i}: Invalid price format")
+                    continue
+            except ValueError:
+                print(f"WARN Skipped product {i}: Could not parse price")
+                continue
+
+            # Extract quantity (if available)
+            quantity_el = el.query_selector('.product-card__description') or \
+                         el.query_selector('[class*="quantity"]') or \
+                         el.query_selector('[class*="weight"]')
+            quantity = quantity_el.inner_text().strip() if quantity_el else "1 unit"
+
+            results.append({
+                "name": name,
+                "price": price,
+                "quantity": quantity,
+                "category": category,
+            })
+        except Exception as e:
+            print(f"WARN Error processing product {i}: {e}")
+    return results
+
+def scrape_elcorte():
+    print("START Starting El Corte Inglés scraper...")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        page = browser.new_page(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800}
+        )
+
+        try:
+            print("GLOBE Visiting El Corte Inglés homepage...")
+            
+            # Add extra headers to avoid HTTP2 issues
+            page.set_extra_http_headers({
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            })
+            
+            # Try multiple times with different approaches
+            max_retries = 3
+            for attempt in range(max_retries):
                 try:
-                    print(f"\n📄 Processing page {page_num}")
-                    print(f"🔗 URL: {paged_url}")
-                    log(f"Processing page {page_num}: {paged_url}")
-                    
-                    page.goto(paged_url, timeout=60000, wait_until='networkidle')
-                    time.sleep(3)  # Wait for dynamic content to load
-                    
-                    # Process the products
-                    has_products = extract_product_data(page, category_slug)
-                    if not has_products:
-                        print("🛑 No more products found - ending category")
-                        log("No more products found - ending category")
-                        break
-
-                    page_num += 1
-                    time.sleep(2)  # Be nice to the server
-                    
-                except PlaywrightTimeoutError:
-                    print(f"⚠️ Timeout on page {page_num}, moving to next category")
-                    log(f"Timeout on page {page_num}, moving to next category")
+                    page.goto(f"{BASE_URL}/despensa", timeout=60000)
+                    time.sleep(3)
+                    print(f"SUCCESS Successfully loaded page on attempt {attempt + 1}")
                     break
                 except Exception as e:
-                    print(f"❌ Error on page {page_num}: {str(e)}")
-                    log(f"Error on page {page_num}: {str(e)}")
-                    # Save page content for debugging
-                    dump_file = f"elcorte_{category_slug}_page{page_num}_debug.html"
-                    with open(dump_file, "w", encoding="utf-8") as f:
-                        f.write(page.content())
-                    print(f"📑 Debug info saved to: {dump_file}")
-                    break
+                    print(f"WARN Attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        print("RETRY Retrying...")
+                        time.sleep(5)
+                    else:
+                        print("ERROR All attempts failed")
+                        raise e
+            
+            print("Current URL:", page.url)
 
+            # Handle cookie popup if present
             try:
-                browser.close()
+                cookie_button = page.query_selector('button:has-text("Aceptar")') or \
+                               page.query_selector('button:has-text("Accept")') or \
+                               page.query_selector('#onetrust-accept-btn-handler')
+                if cookie_button:
+                    cookie_button.click()
+                    print("COOKIE Cookie popup accepted")
+                    time.sleep(2)
+            except Exception:
+                print("WARN Cookie popup not found or already accepted.")
+
+            # Try to navigate to a product category
+            try:
+                # Look for category links
+                category_links = page.query_selector_all('a[href*="/despensa/"]')
+                if category_links:
+                    print("LINK Found category links, clicking first one...")
+                    category_links[0].click()
+                    time.sleep(3)
+                    print("Current URL after category click:", page.url)
+                else:
+                    print("WARN No category links found, staying on homepage")
             except Exception as e:
-                print(f"⚠️ Browser close error: {str(e)}")
-                log(f"Browser close error: {str(e)}")
+                print(f"WARN Error navigating to category: {e}")
+
+            # Scroll to load more products
+            print("SCROLL Scrolling to load products...")
+            for i in range(15):
+                page.mouse.wheel(0, 1000)
+                time.sleep(0.5)
+                
+                # Check if more products loaded
+                current_products = page.query_selector_all('.product-card')
+                if not current_products:
+                    current_products = page.query_selector_all('[data-test="product-card"]')
+                if not current_products:
+                    current_products = page.query_selector_all('[class*="product"]')
+                if i % 5 == 0:
+                    print(f"CHART Found {len(current_products)} products so far...")
+
+            # Wait for any remaining dynamic content
+            print("WAIT Waiting for dynamic content to load...")
+            page.wait_for_timeout(5000)
+            
+            # Final scroll to bottom to ensure everything is loaded
+            page.mouse.wheel(0, 2000)
+            time.sleep(2)
+
+            page.wait_for_timeout(3000)
+            page.screenshot(path="elcorte_debug.png", full_page=True)
+
+            products = extract_elcorte_products(page, "despensa")
+            if not products:
+                print("ERROR No products found.")
+                return
+
+            print(f"BOX Processing {len(products)} products...")
+            for i, product in enumerate(products, 1):
+                try:
+                    existing_product = get_product_by_name_and_store(product["name"], "elcorte")
+                    if existing_product:
+                        if existing_product['price'] != product["price"]:
+                            print(f"RETRY [{i}] Price updated: {product['name']} {existing_product['price']}€ → {product['price']}€")
+                            update_product_price(existing_product['id'], product["price"])
+                        else:
+                            print(f"SKIP [{i}] No change: {product['name']}")
+                    else:
+                        insert_product(product["name"], product["price"], product["category"], "elcorte", product["quantity"])
+                        print(f"SUCCESS [{i}] Inserted: {product['name']} — {product['price']}€ ({product['quantity']})")
+                except Exception as e:
+                    print(f"ERROR DB error on product {i}: {e}")
 
         except Exception as e:
-            print(f"❌ Critical error in category {category_slug}: {str(e)}")
-            log(f"Critical error in category {category_slug}: {str(e)}")
+            print(f"ERROR Scraping failed: {e}")
+        finally:
+            browser.close()
+            print("FINISH Scraper finished.")
 
 if __name__ == "__main__":
     # Verify Playwright installation
-    print("🔍 Checking required packages...")
+    print("SEARCH Checking required packages...")
     try:
         import playwright
-        print("✅ Playwright is installed")
-        log("Playwright is installed")
+        print("SUCCESS Playwright is installed")
     except ImportError:
-        print("❌ Playwright is not installed")
-        print("📦 Please run: pip install playwright")
-        print("🎭 Then run: playwright install")
-        log("Playwright is not installed")
+        print("ERROR Playwright is not installed")
+        print("BOX Please run: pip install playwright")
+        print("THEATER Then run: playwright install")
         exit(1)
 
-    print(f"\n🎬 Starting scraping process")
-    print(f"📋 Total categories to process: {len(CATEGORIES)}")
-    log(f"Starting scraping process. Total categories: {len(CATEGORIES)}")
-
-    start_time = time.time()
-
-    for index, category in enumerate(CATEGORIES, 1):
-        print(f"\n[{index}/{len(CATEGORIES)}] Processing category: {category}")
-        log(f"Processing category {index}/{len(CATEGORIES)}: {category}")
-        scrape_category(category)
-        time.sleep(2)  # Delay between categories
-
-    end_time = time.time()
-    duration = end_time - start_time
-
-    print("\n🎉 Scraping completed!")
-    print(f"⏱️ Total time: {duration:.2f} seconds")
-    log(f"Scraping completed! Total time: {duration:.2f} seconds")
+    scrape_elcorte()

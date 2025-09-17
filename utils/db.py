@@ -47,7 +47,7 @@ def update_product_price(product_id, new_price, store_id=None):
     """Updates the price of a product and logs the change in price_history."""
     try:
         # 1. Update the product price
-        response = supabase.table("products").update({"price": new_price, "updated_at": "now()"}).eq("id", product_id).execute()
+        response = supabase.table("products").update({"price": new_price}).eq("id", product_id).execute()
         if hasattr(response, "data") and response.data:
             log_debug_message(f"✅ Price updated for product ID {product_id}")
         else:
@@ -77,13 +77,14 @@ def update_product_price(product_id, new_price, store_id=None):
     except Exception as e:
         log_debug_message(f"❌ Exception in update_product_price: {e}")
 
-def insert_product(name, price, category, store_id, quantity=None):
+def insert_product(name, price, category, store_id, quantity=None, city=None):
     data = {
         "name": name,
         "price": price,
         "category": category,
         "store_id": store_id,
-        "quantity": quantity
+        "quantity": quantity,
+        "city": city
     }
 
     log_debug_message(f"Attempting to insert product: {data}")  # Log the data being sent
@@ -103,6 +104,26 @@ def insert_product(name, price, category, store_id, quantity=None):
     except Exception as e:
         print(f"❌ Exception during Supabase insert: {e}")
         log_debug_message(f"❌ Exception during Supabase insert: {e}")
+
+def get_city_stats():
+    """Get statistics about products per city"""
+    try:
+        response = supabase.table("products").select("city").execute()
+        
+        if hasattr(response, "data") and response.data:
+            city_counts = {}
+            for product in response.data:
+                city = product.get("city", "Unknown")
+                city_counts[city] = city_counts.get(city, 0) + 1
+            
+            log_debug_message(f"📊 City stats retrieved: {city_counts}")
+            return city_counts
+        else:
+            log_debug_message("⚠️ No products found for city stats")
+            return {}
+    except Exception as e:
+        log_debug_message(f"❌ Exception in get_city_stats: {e}")
+        return {}
 
 if __name__ == "__main__":
     # Example test

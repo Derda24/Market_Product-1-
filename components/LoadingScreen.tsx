@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface LoadingScreenProps {
   isLoading: boolean;
 }
 
 export function LoadingScreen({ isLoading }: LoadingScreenProps) {
+  const { t } = useTranslation();
   const [showLoadingText, setShowLoadingText] = useState(true);
   const [imageError, setImageError] = useState(false);
 
@@ -33,11 +35,10 @@ export function LoadingScreen({ isLoading }: LoadingScreenProps) {
           {/* Image container with blur and fade effect */}
           <div className="absolute inset-0 bg-gradient-to-b from-gray-900/70 to-gray-900/90">
             <Image
-              src={imageError ? fallbackImageUrl : "/market-splash.jpg"}
+              src={fallbackImageUrl}
               alt="Market background"
               fill
               className="object-cover opacity-40 mix-blend-overlay"
-              onError={() => setImageError(true)}
               style={{
                 filter: 'blur(4px)',
                 transform: 'scale(1.1)'
@@ -58,10 +59,10 @@ export function LoadingScreen({ isLoading }: LoadingScreenProps) {
               className="mb-8"
             >
               <h1 className="text-4xl md:text-6xl font-bold mb-4 text-white drop-shadow-lg">
-                Barcelona Market Explorer
+                Spain Market Explorer
               </h1>
               <p className="text-xl md:text-2xl text-gray-100 drop-shadow">
-                Discovering the best prices across local markets
+                Find the best prices across supermarkets in your city
               </p>
             </motion.div>
 

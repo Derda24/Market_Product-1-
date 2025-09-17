@@ -5,6 +5,7 @@ export interface Product {
   category: string;
   store_id: string;
   quantity: string;
+  city?: string;
   image_url?: string;
   nutriscore?: 'a' | 'b' | 'c' | 'd' | 'e';
   nova_group?: 1 | 2 | 3 | 4;

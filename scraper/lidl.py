@@ -2,424 +2,442 @@ import time
 import datetime
 import json
 import re
-from playwright.async_api import async_playwright
+from playwright.sync_api import sync_playwright
 from utils.db import insert_product, get_product_by_name_and_store, update_product_price, supabase
 from utils.logger import log_debug_message as log
 import os
 from dotenv import load_dotenv
-import requests
-from bs4 import BeautifulSoup
-import asyncio
 
 # Load environment variables
 load_dotenv()
 
 BASE_URL = "https://www.lidl.es"
 
-print("🚀 Lidl scraper starting...")
+print("Starting Lidl scraper...")
 
 # Test Supabase connection at startup
-print("🔄 Checking Supabase connection...")
+print("RETRY Checking Supabase connection...")
 try:
     test = supabase.table("products").select("count").limit(1).execute()
-    print("✅ Supabase connection successful")
+    print("SUCCESS: Supabase connection successful")
 except Exception as e:
-    print(f"❌ Supabase connection failed: {str(e)}")
+    print(f"ERROR: Supabase connection failed: {str(e)}")
     print("Please check your .env file contains valid SUPABASE_URL and SUPABASE_KEY")
     exit(1)
 
 def save_debug_html(html, filename="lidl_debug.html"):
     with open(filename, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"✅ HTML saved as {filename}")
+    print(f"SUCCESS: HTML saved as {filename}")
 
-async def get_all_categories(page):
-    """Extract all subcategory URLs from the navigation menu on the main food category page."""
-    print("🔍 Extracting all categories from main food page...")
-    await page.goto(f"{BASE_URL}/es/c/comprar-alimentos/c1856", timeout=60000)
-    await page.wait_for_load_state('networkidle')
-    # Handle cookie consent if present
+def extract_lidl_products(page, category):
+    """Extract products from Lidl category page"""
     try:
-        await page.click('#onetrust-accept-btn-handler', timeout=5000)
-        await page.wait_for_timeout(1000)
-    except:
-        pass
-    # Handle store/location selection overlay if present
-    try:
-        await page.click('button[aria-label*="Cerrar"], button[aria-label*="close"], button[data-test*="close"]', timeout=5000)
-        await page.wait_for_timeout(1000)
-    except:
-        pass
-    # Try clicking all .shifter-handle elements until menu opens
-    try:
-        handles = await page.query_selector_all('.shifter-handle')
-        for idx, handle in enumerate(handles):
-            print(f"   Trying to click .shifter-handle #{idx+1}...")
-            try:
-                await handle.click(timeout=2000)
-                await page.wait_for_timeout(1000)
-                body_class = await page.evaluate('document.body.className')
-                if 'shifter-open' in body_class:
-                    print("   ✅ Menu opened!")
-                    break
-            except Exception as e:
-                print(f"   ⚠️ Could not click handle #{idx+1}: {e}")
+        # Wait for products to load
+        page.wait_for_selector('.product-grid-box-tile', timeout=15000)
     except Exception as e:
-        print(f"   ⚠️ Could not find or click any .shifter-handle: {e}")
-    html = await page.content()
-    save_debug_html(html, "lidl_main_page.html")
-    soup = BeautifulSoup(html, "html.parser")
-    categories = []
-    nav = soup.find('div', {'id': 'navigation-menu'})
-    if nav:
-        for a in nav.find_all('a', href=True):
-            href = a['href']
-            title = a.get('title') or a.get_text(strip=True)
-            # Accept both absolute and relative category links
-            if href.startswith('/c/') or href.startswith('c/'):
-                full_url = BASE_URL + href if href.startswith('/') else BASE_URL + '/' + href
-                categories.append({'title': title, 'url': full_url})
-    print(f"📂 Found {len(categories)} subcategories")
-    for cat in categories:
-        print(f"   - {cat['title']}")
-    return categories
-
-async def get_product_links_from_category(page, category_info):
-    """Get all product links from a category page, handling dynamic loading."""
-    try:
-        category_url = category_info["url"]
-        category_title = category_info["title"]
-        print(f"🔗 Visiting category: {category_title} ({category_url})")
-        await page.goto(category_url, timeout=60000)
-        # Wait for product grid to appear (dynamic content)
+        print(f"WARN Error waiting for products: {e}")
+        # Try alternative selectors
         try:
-            await page.wait_for_selector('.product-grid-box-tile', timeout=15000)
+            page.wait_for_selector('li.grid-item', timeout=10000)
         except Exception:
-            print(f"   ⚠️ Product grid not found after waiting, will save debug HTML.")
-        # Scroll to bottom to trigger lazy loading (repeat a few times)
-        for _ in range(5):
-            await page.mouse.wheel(0, 10000)
-            await page.wait_for_timeout(1000)
-        html = await page.content()
-        soup = BeautifulSoup(html, "html.parser")
-        product_links = []
-        product_tiles = soup.select(".product-grid-box-tile")
-        for tile in product_tiles:
-            link_elem = tile.select_one("a[href*='/p/']")
-            if link_elem:
-                href = link_elem.get("href", "")
-                if href:
-                    if href.startswith("http"):
-                        full_url = href
-                    else:
-                        full_url = f"{BASE_URL}/{href.lstrip('/')}"
-                    product_links.append(full_url)
-        if not product_links:
-            debug_filename = f"lidl_category_debug_{category_title.replace(' ', '_')}.html"
-            save_debug_html(html, debug_filename)
-            print(f"   💾 Saved debug HTML as {debug_filename}")
-        product_links = list(set(product_links))
-        print(f"   📦 Found {len(product_links)} products")
-        return product_links
-    except Exception as e:
-        print(f"❌ Error getting products from {category_info['title']}: {e}")
+            print("WARN Alternative selector also failed")
+
+    # Find all product elements
+    product_elements = page.query_selector_all('.product-grid-box-tile')
+    if not product_elements:
+        product_elements = page.query_selector_all('li.grid-item')
+    
+    if not product_elements:
+        print("ERROR: No product elements found")
+        page.screenshot(path="lidl_debug.png", full_page=True)
+        with open("lidl_debug.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+        print("📸 Screenshot saved to lidl_debug.png, HTML saved to lidl_debug.html")
         return []
 
-async def scrape_product_details(page, product_url):
-    """Extract product details from a product page"""
-    try:
-        await page.goto(product_url, timeout=30000)
-        await page.wait_for_load_state('networkidle')
-        
-        # Wait a bit for dynamic content to load
-        await page.wait_for_timeout(2000)
-        
-        # Handle cookie consent if present
-        try:
-            await page.click('#onetrust-accept-btn-handler', timeout=3000)
-            await page.wait_for_timeout(1000)
-        except:
-            pass
+    print(f"🔎 Found {len(product_elements)} products.")
 
-        # Try multiple selectors for product title
-        title_selectors = [
-            "h1",
-            ".product-title",
-            ".product-name",
-            "[data-test='product-title']",
-            ".product-details h1",
-            ".product-info h1"
-        ]
-        
-        name_elem = None
-        for selector in title_selectors:
-            try:
-                name_elem = await page.query_selector(selector)
-                if name_elem:
-                    break
-            except:
-                continue
-        
-        if not name_elem:
-            # Save debug HTML for this product page
-            html = await page.content()
-            debug_filename = f"lidl_product_debug_{product_url.split('/')[-1]}.html"
-            save_debug_html(html, debug_filename)
-            print(f"⚠️ Product title not found for {product_url}")
-            print(f"   💾 Saved debug HTML as {debug_filename}")
-            return None
-        
-        # Try multiple selectors for price
-        price_selectors = [
-            ".price",
-            ".product-price",
-            ".price-value",
-            "[data-test='product-price']",
-            ".current-price",
-            ".price__current"
-        ]
-        
-        price_elem = None
-        for selector in price_selectors:
-            try:
-                price_elem = await page.query_selector(selector)
-                if price_elem:
-                    break
-            except:
-                continue
-        
-        # Try multiple selectors for quantity/weight
-        quantity_selectors = [
-            ".quantity",
-            ".product-quantity",
-            ".weight",
-            ".product-weight",
-            "[data-test='product-quantity']",
-            ".unit"
-        ]
-        
-        quantity_elem = None
-        for selector in quantity_selectors:
-            try:
-                quantity_elem = await page.query_selector(selector)
-                if quantity_elem:
-                    break
-            except:
-                continue
-
-        if not name_elem or not price_elem:
-            print(f"⚠️ Missing name or price for {product_url}")
-            return None
-        
-        name = await name_elem.inner_text()
-        price_text = await price_elem.inner_text()
-        quantity = await quantity_elem.inner_text() if quantity_elem else ""
-        
-        # Clean price - handle different formats
+    results = []
+    for i, el in enumerate(product_elements, 1):
         try:
-            # Remove currency symbols and clean up
-            price_clean = price_text.replace("€", "").replace(",", ".").strip()
-            # Extract first number from the text
-            price_match = re.search(r'[\d,]+\.?\d*', price_clean)
-            if price_match:
-                price_clean = price_match.group().replace(",", ".")
-            clean_price = float(price_clean)
-        except ValueError:
-            print(f"⚠️ Invalid price format: {price_text}")
-            return None
-        
-        return {
-            "name": name.strip(),
-            "price": clean_price,
-            "quantity": quantity.strip(),
-            "url": product_url
-        }
-        
-    except Exception as e:
-        print(f"❌ Error extracting product from {product_url}: {e}")
-        return None
-
-async def process_product(product_data, category_name):
-    """Process a single product - check if exists, update or insert"""
-    name = product_data["name"]
-    price = product_data["price"]
-    quantity = product_data["quantity"]
-    
-    print(f"   ✨ Processing: {name}")
-    
-    # Check if product already exists
-    existing_product = get_product_by_name_and_store(name, "lidl")
-    
-    if existing_product:
-        if existing_product['price'] != price:
-            update_product_price(existing_product['id'], price, store_id="lidl")
-            print(f"   🔄 Updated price for {name}: {existing_product['price']}€ → {price}€")
-            return "updated"
-        else:
-            print(f"   ⏭️ No changes for {name}")
-            return "skipped"
-    else:
-        try:
-            insert_product(
-                name=name,
-                price=price,
-                category=category_name,
-                store_id="lidl",
-                quantity=quantity
-            )
-            print(f"   ✅ Added: {name} - {price}€ {quantity}")
-            return "inserted"
-        except Exception as e:
-            print(f"   ❌ Failed to insert product: {str(e)}")
-            return "error"
-
-async def scrape_lidl_products():
-    """Main scraping function for Lidl"""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
-        page = await context.new_page()
-        
-        try:
-            # Get all categories
-            categories = await get_all_categories(page)
+            # Extract product name
+            name_el = el.query_selector('h2[class*="_title_"]') or \
+                     el.query_selector('h3[class*="_title_"]') or \
+                     el.query_selector('.product-title') or \
+                     el.query_selector('h2') or \
+                     el.query_selector('h3')
             
-            total_inserted = 0
-            total_updated = 0
-            total_skipped = 0
-            total_errors = 0
+            if not name_el:
+                print(f"WARN Skipped product {i}: Could not find name")
+                continue
+            name = name_el.inner_text().strip()
             
-            for idx, category_info in enumerate(categories, 1):
-                print(f"\n[{idx}/{len(categories)}] Processing category: {category_info['title']}")
+            if not name:
+                print(f"WARN Skipped product {i}: Empty name")
+                continue
+
+            # Extract price
+            price_el = el.query_selector('span[class*="_price_"]') or \
+                      el.query_selector('.product-price') or \
+                      el.query_selector('[class*="price"]') or \
+                      el.query_selector('span[class*="Price"]')
+            
+            if not price_el:
+                print(f"WARN Skipped product {i}: Could not find price")
+                continue
                 
-                # Get product links from this category
-                product_urls = await get_product_links_from_category(page, category_info)
-                
-                if not product_urls:
-                    print(f"   ⚠️ No products found in category")
+            price_text = price_el.inner_text().strip()
+            try:
+                # Extract numeric value from price text
+                import re
+                price_match = re.search(r'(\d+[.,]\d+|\d+)', price_text.replace(',', '.'))
+                if price_match:
+                    price = float(price_match.group(1).replace(',', '.'))
+                else:
+                    print(f"WARN Skipped product {i}: Invalid price format")
                     continue
+            except ValueError:
+                print(f"WARN Skipped product {i}: Could not parse price")
+                continue
+
+            # Extract quantity (if available)
+            quantity_el = el.query_selector('.product-quantity') or \
+                         el.query_selector('[class*="quantity"]') or \
+                         el.query_selector('[class*="weight"]')
+            quantity = quantity_el.inner_text().strip() if quantity_el else "1 unit"
+
+            results.append({
+                "name": name,
+                "price": price,
+                "quantity": quantity,
+                "category": category,
+            })
+        except Exception as e:
+            print(f"WARN Error processing product {i}: {e}")
+    return results
+
+def scrape_lidl():
+    print("Starting Lidl scraper...")
+    with sync_playwright() as p:
+        # Use more stealthy browser settings
+        browser = p.chromium.launch(
+            headless=False,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-field-trial-config',
+                '--disable-ipc-flooding-protection',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--no-zygote',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--disable-background-networking',
+                '--disable-sync-preferences',
+                '--disable-background-downloads',
+                '--disable-client-side-phishing-detection',
+                '--disable-component-update',
+                '--disable-domain-reliability',
+                '--disable-features=TranslateUI',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-background-timer-throttling',
+                '--disable-renderer-backgrounding',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-features=TranslateUI',
+                '--disable-ipc-flooding-protection',
+                '--no-default-browser-check',
+                '--no-first-run',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--no-zygote',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--disable-background-networking',
+                '--disable-sync-preferences',
+                '--disable-background-downloads',
+                '--disable-client-side-phishing-detection',
+                '--disable-component-update',
+                '--disable-domain-reliability',
+                '--disable-features=TranslateUI'
+            ]
+        )
+        
+        # Create context with more stealthy settings
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="es-ES",
+            timezone_id="Europe/Madrid",
+            geolocation={"latitude": 41.3851, "longitude": 2.1734},  # Barcelona coordinates
+            permissions=["geolocation"],
+            extra_http_headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+                "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Cache-Control": "max-age=0",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1"
+            }
+        )
+        
+        # Add comprehensive stealth scripts
+        context.add_init_script("""
+            // Override the 'webdriver' property
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            
+            // Override the 'plugins' property
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            
+            // Override the 'languages' property
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['es-ES', 'es', 'en'],
+            });
+            
+            // Override the 'permissions' property
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+            
+            // Override the 'chrome' property
+            Object.defineProperty(window, 'chrome', {
+                writable: true,
+                enumerable: true,
+                configurable: true,
+                value: {
+                    runtime: {},
+                },
+            });
+            
+            // Override the 'outerHeight' and 'outerWidth' properties
+            Object.defineProperty(window, 'outerHeight', {
+                get: () => 1080,
+            });
+            Object.defineProperty(window, 'outerWidth', {
+                get: () => 1920,
+            });
+            
+            // Override the 'screen' property
+            Object.defineProperty(window, 'screen', {
+                get: () => ({
+                    width: 1920,
+                    height: 1080,
+                    availWidth: 1920,
+                    availHeight: 1040,
+                    colorDepth: 24,
+                    pixelDepth: 24
+                }),
+            });
+            
+            // Override the 'devicePixelRatio' property
+            Object.defineProperty(window, 'devicePixelRatio', {
+                get: () => 1,
+            });
+            
+            // Override the 'innerHeight' and 'innerWidth' properties
+            Object.defineProperty(window, 'innerHeight', {
+                get: () => 1040,
+            });
+            Object.defineProperty(window, 'innerWidth', {
+                get: () => 1920,
+            });
+            
+            // Override the 'localStorage' property
+            Object.defineProperty(window, 'localStorage', {
+                get: () => ({
+                    getItem: () => null,
+                    setItem: () => {},
+                    removeItem: () => {},
+                    clear: () => {},
+                    key: () => null,
+                    length: 0
+                }),
+            });
+            
+            // Override the 'sessionStorage' property
+            Object.defineProperty(window, 'sessionStorage', {
+                get: () => ({
+                    getItem: () => null,
+                    setItem: () => {},
+                    removeItem: () => {},
+                    clear: () => {},
+                    key: () => null,
+                    length: 0
+                }),
+            });
+        """)
+        
+        page = context.new_page()
+
+        try:
+            print("GLOBE Visiting Lidl homepage...")
+            
+            # First visit the main homepage to establish a session
+            page.goto(f"{BASE_URL}/es", timeout=60000)
+            time.sleep(3)
+            print("Current URL after homepage:", page.url)
+
+            # Handle cookie popup if present
+            try:
+                cookie_button = page.query_selector('#onetrust-accept-btn-handler') or \
+                               page.query_selector('button:has-text("Aceptar")') or \
+                               page.query_selector('button:has-text("Accept")') or \
+                               page.query_selector('button[data-test*="accept"]')
+                if cookie_button:
+                    cookie_button.click()
+                    print("COOKIE Cookie popup accepted")
+                    time.sleep(2)
+            except Exception:
+                print("WARN Cookie popup not found or already accepted.")
+
+            # Try to navigate to a different category first
+            print("LINK Navigating to a different category first...")
+            page.goto(f"{BASE_URL}/es/c/comprar-bebidas/c1857", timeout=60000)
+            time.sleep(3)
+            print("Current URL after drinks category:", page.url)
+
+            # Now navigate to the food category
+            print("LINK Navigating to food category...")
+            page.goto(f"{BASE_URL}/es/c/comprar-alimentos/c1856", timeout=60000)
+            time.sleep(5)  # Wait longer for security check
+            print("Current URL after category navigation:", page.url)
+
+            # Check if we hit the security page
+            page_content = page.content().lower()
+            if "security" in page.url.lower() or "myra" in page_content or "captcha" in page_content:
+                print("WARN Hit security check page, waiting for manual verification...")
+                print("Please manually complete the security check in the browser window")
+                print("Then press Enter to continue...")
+                input()
+                time.sleep(3)
                 
-                # Process each product
-                for i, product_url in enumerate(product_urls, 1):
-                    print(f"   [{i}/{len(product_urls)}] Fetching product details...")
-                    
-                    product_data = await scrape_product_details(page, product_url)
-                    if product_data:
-                        result = await process_product(product_data, category_info['title'])
-                        if result == "inserted":
-                            total_inserted += 1
-                        elif result == "updated":
-                            total_updated += 1
-                        elif result == "skipped":
-                            total_skipped += 1
+                # Check if we're still on the security page
+                if "security" in page.url.lower() or "myra" in page.content().lower():
+                    print("ERROR: Still on security page after manual verification")
+                    return
+
+            # Handle store/location selection overlay if present
+            try:
+                close_button = page.query_selector('button[aria-label*="Cerrar"]') or \
+                              page.query_selector('button[aria-label*="close"]') or \
+                              page.query_selector('button[data-test*="close"]') or \
+                              page.query_selector('button[class*="close"]')
+                if close_button:
+                    close_button.click()
+                    print("STORE Store selection closed")
+                    time.sleep(2)
+            except Exception:
+                print("WARN Store selection overlay not found.")
+
+            # Try to find and click on a specific category if needed
+            try:
+                category_links = page.query_selector_all('a[href*="/c/"]')
+                if category_links:
+                    print("LINK Found category links, clicking first one...")
+                    category_links[0].click()
+                    time.sleep(3)
+                    print("Current URL after category click:", page.url)
+            except Exception as e:
+                print(f"WARN Error navigating to category: {e}")
+
+            # Scroll to load more products
+            print("SCROLL Scrolling to load products...")
+            for i in range(15):
+                page.mouse.wheel(0, 1000)
+                time.sleep(0.5)
+                
+                # Check if more products loaded
+                current_products = page.query_selector_all('.product-grid-box-tile')
+                if not current_products:
+                    current_products = page.query_selector_all('li.grid-item')
+                if not current_products:
+                    current_products = page.query_selector_all('[class*="product"]')
+                if i % 5 == 0:
+                    print(f"CHART Found {len(current_products)} products so far...")
+
+            # Wait for any remaining dynamic content
+            print("WAIT Waiting for dynamic content to load...")
+            page.wait_for_timeout(5000)
+            
+            # Final scroll to bottom to ensure everything is loaded
+            page.mouse.wheel(0, 2000)
+            time.sleep(2)
+
+            page.wait_for_timeout(3000)
+            
+            # Try to take screenshot, but don't fail if it doesn't work
+            try:
+                page.screenshot(path="lidl_debug.png", full_page=True)
+            except Exception as e:
+                print(f"WARN Screenshot failed: {e}")
+
+            products = extract_lidl_products(page, "alimentos")
+            if not products:
+                print("ERROR: No products found.")
+                return
+
+            print(f"Processing {len(products)} products...")
+            for i, product in enumerate(products, 1):
+                try:
+                    existing_product = get_product_by_name_and_store(product["name"], "lidl")
+                    if existing_product:
+                        if existing_product['price'] != product["price"]:
+                            print(f"RETRY [{i}] Price updated: {product['name']} {existing_product['price']}€ → {product['price']}€")
+                            update_product_price(existing_product['id'], product["price"])
                         else:
-                            total_errors += 1
+                            print(f"SKIP [{i}] No change: {product['name']}")
                     else:
-                        total_errors += 1
-                
-                print(f"   📊 Category summary:")
-                print(f"      Products found: {len(product_urls)}")
-                print(f"      Products processed: {len(product_urls)}")
-            
-            print("\n🎉 Lidl scraping completed!")
-            print(f"   Total products added: {total_inserted}")
-            print(f"   Total products updated: {total_updated}")
-            print(f"   Total products skipped: {total_skipped}")
-            print(f"   Total errors: {total_errors}")
-            
+                        insert_product(product["name"], product["price"], product["category"], "lidl", product["quantity"])
+                        print(f"SUCCESS: [{i}] Inserted: {product['name']} — {product['price']}€ ({product['quantity']})")
+                except Exception as e:
+                    print(f"ERROR: DB error on product {i}: {e}")
+
+        except Exception as e:
+            print(f"ERROR: Scraping failed: {e}")
         finally:
-            await browser.close()
-
-async def extract_and_save_category_urls():
-    """Extract all Lidl Spain food subcategory URLs from navigation JSON and save to lidl_categories.json."""
-    nav_url = f"{BASE_URL}/first-level-navigation-json?warehouseKey=0"
-    resp = requests.get(nav_url)
-    resp.raise_for_status()
-    nav_json = resp.json()
-    categories = []
-    def extract_categories(nodes):
-        for node in nodes:
-            url = node.get('url')
-            title = node.get('displayName') or node.get('name')
-            if url and url.startswith('/es/c/'):
-                categories.append({'title': title, 'url': BASE_URL + url})
-            # Recursively extract children
-            if 'children' in node and node['children']:
-                extract_categories(node['children'])
-    extract_categories(nav_json)
-    with open('lidl_categories.json', 'w', encoding='utf-8') as f:
-        json.dump(categories, f, ensure_ascii=False, indent=2)
-    print(f"✅ Saved {len(categories)} category URLs to lidl_categories.json")
-
-async def scrape_category_products(page, category_url):
-    print(f"\n🔎 Scraping category: {category_url}")
-    await page.goto(category_url, timeout=60000)
-    await page.wait_for_load_state('networkidle')
-    # Accept cookies if present
-    try:
-        await page.click('#onetrust-accept-btn-handler', timeout=5000)
-        await page.wait_for_timeout(1000)
-    except:
-        pass
-    # Wait for product grid
-    await page.wait_for_selector('li.grid-item', timeout=15000)
-    # Scroll to load all products (lazy loading)
-    previous_count = 0
-    for _ in range(20):  # max 20 scrolls
-        items = await page.query_selector_all('li.grid-item')
-        if len(items) == previous_count:
-            break
-        previous_count = len(items)
-        await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-        await page.wait_for_timeout(1200)
-    html = await page.content()
-    soup = BeautifulSoup(html, "html.parser")
-    products = []
-    for li in soup.select('li.grid-item'):
-        a = li.select_one('a.clickable')
-        if not a:
-            continue
-        url = a['href']
-        full_url = BASE_URL + url if url.startswith('/') else url
-        img = a.select_one('img')
-        image_url = img['src'] if img else None
-        price = a.select_one('span[class*="_price_"]')
-        title = a.select_one('h2[class*="_title_"]')
-        products.append({
-            'url': full_url,
-            'image': image_url,
-            'price': price.text.strip() if price else None,
-            'title': title.text.strip() if title else None,
-        })
-    print(f"   🛒 Found {len(products)} products in this category.")
-    return products
-
-async def main():
-    # Load category URLs from file or define manually
-    try:
-        with open('lidl_categories.json', encoding='utf-8') as f:
-            categories = json.load(f)
-    except Exception:
-        print("⚠️ Could not load lidl_categories.json. Please run category extraction first or provide category URLs.")
-        return
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        all_products = []
-        for cat in categories:
-            cat_url = cat['url']
-            products = await scrape_category_products(page, cat_url)
-            for prod in products:
-                prod['category'] = cat.get('title')
-            all_products.extend(products)
-        with open('lidl_products.json', 'w', encoding='utf-8') as f:
-            json.dump(all_products, f, ensure_ascii=False, indent=2)
-        print(f"\n✅ Saved {len(all_products)} products to lidl_products.json")
-        await browser.close()
+            browser.close()
+            print("FINISH Scraper finished.")
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "extract_categories":
-        asyncio.run(extract_and_save_category_urls())
-    else:
-        asyncio.run(main())
+    # Verify Playwright installation
+    print("SEARCH Checking required packages...")
+    try:
+        import playwright
+        print("SUCCESS: Playwright is installed")
+    except ImportError:
+        print("ERROR: Playwright is not installed")
+        print("Please run: pip install playwright")
+        print("Then run: playwright install")
+        exit(1)
+
+    scrape_lidl()

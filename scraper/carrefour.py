@@ -1,134 +1,376 @@
-import asyncio
-from playwright.async_api import async_playwright
-from utils.db import insert_product
-from utils.logger import log_debug_message
-import random
+import time
+import re
+from playwright.sync_api import sync_playwright
+from utils.db import insert_product, get_product_by_name_and_store, update_product_price, supabase
+from utils.logger import log_debug_message as log
 
+BASE_URL = "https://www.carrefour.es"
+
+print("START Carrefour scraper starting...")
+
+# Test Supabase connection at startup
+print("RETRY Checking Supabase connection...")
 try:
-    from playwright_stealth import stealth_async as stealth
-except ImportError:
-    try:
-        from playwright_stealth.stealth import stealth
-    except ImportError:
-        stealth = None
+    test = supabase.table("products").select("count").limit(1).execute()
+    print("SUCCESS Supabase connection successful")
+except Exception as e:
+    print(f"ERROR Supabase connection failed: {str(e)}")
+    print("Please check your .env file contains valid SUPABASE_URL and SUPABASE_KEY")
+    exit(1)
 
-# Fake user-agent and locale to appear more human
-STEALTH_CONTEXT_CONFIG = {
-    "user_agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "locale": "es-ES",
-    "viewport": {"width": 1280, "height": 800},
-    "timezone_id": "Europe/Madrid"
-}
-
-# Optional proxy config (replace with your proxy if needed)
-PROXY = {
-    "server": "http://your-proxy-address:port",  # ← UPDATE THIS
-    "username": "your-username",                 # ← if needed
-    "password": "your-password"                  # ← if needed
-}
-
-def get_categories_by_store(store_id):
-    print(f"📋 Getting categories for store: {store_id}")
-    return [
-        {"name": "Fruits", "url": "https://www.carrefour.es/supermercado/fruta/cat20010/c"},
-        {"name": "Vegetables", "url": "https://www.carrefour.es/supermercado/verdura/cat20011/c"},
-    ]
-
-async def scroll_page(page, times=5, delay=1):
-    for i in range(times):
-        await page.mouse.wheel(0, 3000)
-        await asyncio.sleep(delay)
-        log_debug_message(f"🔄 Scroll {i + 1}/{times} completed...")
-        print(f"🔄 Scroll {i + 1}/{times} completed...")
-
-async def mimic_human_behavior(page):
-    # Random mouse movements
-    for _ in range(random.randint(3, 7)):
-        x = random.randint(0, 1200)
-        y = random.randint(0, 700)
-        await page.mouse.move(x, y, steps=random.randint(5, 20))
-        await asyncio.sleep(random.uniform(0.2, 0.8))
-    # Try to accept cookie banner
-    try:
-        await page.click('button:has-text("Aceptar")', timeout=3000)
-        print("🍪 Cookie banner accepted.")
-    except Exception:
-        pass
-    await asyncio.sleep(random.uniform(1.5, 3.5))
-
-async def scrape_category(page, category_url, category_name):
-    print(f"🔎 Scraping category: {category_name}")
-    await page.goto(category_url, timeout=60000)
-    await page.wait_for_load_state("domcontentloaded")
-    await mimic_human_behavior(page)
-    await scroll_page(page)
-
-    html = await page.content()
-    with open(f"{category_name.lower()}_dump.html", "w", encoding="utf-8") as f:
+def save_debug_html(html, filename="carrefour_debug.html"):
+    with open(filename, "w", encoding="utf-8") as f:
         f.write(html)
+    print(f"SUCCESS HTML saved as {filename}")
 
-    products = await page.query_selector_all("li.product-card")
-
-    log_debug_message(f"🛒 Found {len(products)} products in {category_name}")
-    print(f"🛒 Found {len(products)} products in {category_name}")
-
-    for product in products:
+def extract_carrefour_products(page, category):
+    """Extract products from Carrefour category page"""
+    try:
+        # Wait for products to load
+        page.wait_for_selector('.product-card', timeout=15000)
+    except Exception as e:
+        print(f"WARN Error waiting for products: {e}")
+        # Try alternative selectors
         try:
-            name_el = await product.query_selector("h2")
-            price_el = await product.query_selector(".product-card-price__price")
-
-            name = await name_el.inner_text() if name_el else "N/A"
-            price_text = await price_el.inner_text() if price_el else "0"
-
+            page.wait_for_selector('[data-test="product-card"]', timeout=10000)
+        except Exception:
             try:
-                price = float(price_text.replace("€", "").replace(",", ".").strip())
-            except ValueError:
-                price = 0.0
+                page.wait_for_selector('[class*="product"]', timeout=10000)
+            except Exception:
+                print("WARN All product selectors failed")
 
-            await insert_product(
-                name=name.strip(),
-                price=price,
-                category=category_name,
-                store_id="carrefour",
-                quantity="1"
-            )
-            log_debug_message(f"✅ Inserted: {name} - {price}€")
-            print(f"✅ Inserted: {name} - {price}€")
+    # Find all product elements
+    product_elements = page.query_selector_all('.product-card')
+    if not product_elements:
+        product_elements = page.query_selector_all('[data-test="product-card"]')
+    if not product_elements:
+        product_elements = page.query_selector_all('[class*="product"]')
+    
+    if not product_elements:
+        print("ERROR No product elements found")
+        page.screenshot(path="carrefour_debug.png", full_page=True)
+        with open("carrefour_debug.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+        print("📸 Screenshot saved to carrefour_debug.png, HTML saved to carrefour_debug.html")
+        return []
+
+    print(f"🔎 Found {len(product_elements)} products.")
+
+    results = []
+    for i, el in enumerate(product_elements, 1):
+        try:
+            # Extract product name
+            name_el = el.query_selector('h2') or \
+                     el.query_selector('h3') or \
+                     el.query_selector('.product-title') or \
+                     el.query_selector('[data-test="product-title"]') or \
+                     el.query_selector('[class*="title"]')
+            
+            if not name_el:
+                print(f"WARN Skipped product {i}: Could not find name")
+                continue
+            name = name_el.inner_text().strip()
+            
+            if not name:
+                print(f"WARN Skipped product {i}: Empty name")
+                continue
+
+            # Extract price
+            price_el = el.query_selector('.product-card-price__price') or \
+                      el.query_selector('[data-test="product-price"]') or \
+                      el.query_selector('.product-price') or \
+                      el.query_selector('[class*="price"]')
+            
+            if not price_el:
+                print(f"WARN Skipped product {i}: Could not find price")
+                continue
+                
+            price_text = price_el.inner_text().strip()
+            try:
+                # Extract numeric value from price text
+                price_match = re.search(r'(\d+[.,]\d+|\d+)', price_text.replace(',', '.'))
+                if price_match:
+                    price = float(price_match.group(1).replace(',', '.'))
+                else:
+                    print(f"WARN Skipped product {i}: Invalid price format")
+                    continue
+            except ValueError:
+                print(f"WARN Skipped product {i}: Invalid price format")
+                continue
+
+            # Extract quantity (optional)
+            quantity_el = el.query_selector('[class*="quantity"]') or \
+                         el.query_selector('[class*="weight"]') or \
+                         el.query_selector('[class*="unit"]')
+            quantity = quantity_el.inner_text().strip() if quantity_el else "1 unit"
+
+            results.append({
+                "name": name,
+                "price": price,
+                "category": category,
+                "quantity": quantity
+            })
 
         except Exception as e:
-            log_debug_message(f"❌ Product parse error: {e}")
-            print(f"❌ Product parse error: {e}")
+            print(f"ERROR Error processing product {i}: {e}")
+            continue
 
-async def scrape_carrefour():
-    print("🚀 Starting Carrefour scraper...")
-    categories = get_categories_by_store("carrefour")
+    return results
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=False
-            # proxy=PROXY  # removed for direct connection
+def scrape_carrefour():
+    print("START Starting Carrefour scraper...")
+    with sync_playwright() as p:
+        # Use more stealthy browser settings
+        browser = p.chromium.launch(
+            headless=False,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-field-trial-config',
+                '--disable-ipc-flooding-protection',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--no-zygote',
+                '--disable-gpu',
+                '--disable-software-rasterizer',
+                '--disable-background-networking',
+                '--disable-sync-preferences',
+                '--disable-background-downloads',
+                '--disable-client-side-phishing-detection',
+                '--disable-component-update',
+                '--disable-domain-reliability',
+                '--disable-features=TranslateUI'
+            ]
         )
+        
+        # Create context with more stealthy settings
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080},
+            locale="es-ES",
+            timezone_id="Europe/Madrid",
+            geolocation={"latitude": 41.3851, "longitude": 2.1734},  # Barcelona coordinates
+            permissions=["geolocation"],
+            extra_http_headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+                "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Cache-Control": "max-age=0",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1"
+            }
+        )
+        
+        # Add comprehensive stealth scripts
+        context.add_init_script("""
+            // Override the 'webdriver' property
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+            });
+            
+            // Override the 'plugins' property
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3, 4, 5],
+            });
+            
+            // Override the 'languages' property
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['es-ES', 'es', 'en'],
+            });
+            
+            // Override the 'permissions' property
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+            
+            // Override the 'chrome' property
+            Object.defineProperty(window, 'chrome', {
+                writable: true,
+                enumerable: true,
+                configurable: true,
+                value: {
+                    runtime: {},
+                },
+            });
+            
+            // Override the 'outerHeight' and 'outerWidth' properties
+            Object.defineProperty(window, 'outerHeight', {
+                get: () => 1080,
+            });
+            Object.defineProperty(window, 'outerWidth', {
+                get: () => 1920,
+            });
+            
+            // Override the 'screen' property
+            Object.defineProperty(window, 'screen', {
+                get: () => ({
+                    width: 1920,
+                    height: 1080,
+                    availWidth: 1920,
+                    availHeight: 1040,
+                    colorDepth: 24,
+                    pixelDepth: 24
+                }),
+            });
+            
+            // Override the 'devicePixelRatio' property
+            Object.defineProperty(window, 'devicePixelRatio', {
+                get: () => 1,
+            });
+            
+            // Override the 'innerHeight' and 'innerWidth' properties
+            Object.defineProperty(window, 'innerHeight', {
+                get: () => 1040,
+            });
+            Object.defineProperty(window, 'innerWidth', {
+                get: () => 1920,
+            });
+        """)
+        
+        page = context.new_page()
 
-        context = await browser.new_context(**STEALTH_CONTEXT_CONFIG)
-        page = await context.new_page()
-        if stealth:
-            await stealth(page)
+        try:
+            print("GLOBE Visiting Carrefour homepage...")
+            
+            # First visit the main homepage to establish a session
+            page.goto(f"{BASE_URL}", timeout=60000)
+            time.sleep(3)
+            print("Current URL after homepage:", page.url)
 
-        for cat in categories:
-            log_debug_message(f"🔎 Scraping category: {cat['name']}")
-            print(f"🔎 Scraping category: {cat['name']}")
+            # Check if we hit the Cloudflare page
+            page_content = page.content().lower()
+            if "cloudflare" in page_content or "blocked" in page_content:
+                print("WARN Hit Cloudflare security check, waiting for manual verification...")
+                print("Please manually complete the security check in the browser window")
+                print("Then press Enter to continue...")
+                input()
+                time.sleep(3)
+                
+                # Check if we're still on the security page
+                if "cloudflare" in page.content().lower() or "blocked" in page.content().lower():
+                    print("ERROR Still on security page after manual verification")
+                    return
+
+            # Handle cookie popup if present
             try:
-                await scrape_category(page, cat["url"], cat["name"])
-            except Exception as e:
-                log_debug_message(f"❌ Failed to scrape {cat['name']}: {e}")
-                print(f"❌ Failed to scrape {cat['name']}: {e}")
+                cookie_button = page.query_selector('button:has-text("Aceptar")') or \
+                               page.query_selector('button:has-text("Accept")') or \
+                               page.query_selector('button[data-test*="accept"]')
+                if cookie_button:
+                    cookie_button.click()
+                    print("COOKIE Cookie popup accepted")
+                    time.sleep(2)
+            except Exception:
+                print("WARN Cookie popup not found or already accepted.")
 
-        await browser.close()
-        print("🏁 Carrefour scraping completed!")
+            # Try to navigate to a different category
+            print("LINK Navigating to vegetables category...")
+            page.goto(f"{BASE_URL}/supermercado/verdura/cat20011/c", timeout=60000)
+            time.sleep(3)
+            print("Current URL after category navigation:", page.url)
+
+            # Handle any overlays or popups
+            try:
+                close_button = page.query_selector('button[aria-label*="Cerrar"]') or \
+                              page.query_selector('button[aria-label*="close"]') or \
+                              page.query_selector('button[data-test*="close"]')
+                if close_button:
+                    close_button.click()
+                    print("STORE Overlay closed")
+                    time.sleep(2)
+            except Exception:
+                print("WARN No overlay found.")
+
+            # Scroll to load more products
+            print("SCROLL Scrolling to load products...")
+            for i in range(15):
+                page.mouse.wheel(0, 1000)
+                time.sleep(0.5)
+                
+                # Check if more products loaded
+                current_products = page.query_selector_all('.product-card')
+                if not current_products:
+                    current_products = page.query_selector_all('[data-test="product-card"]')
+                if not current_products:
+                    current_products = page.query_selector_all('[class*="product"]')
+                if i % 5 == 0:
+                    print(f"CHART Found {len(current_products)} products so far...")
+
+            # Wait for any remaining dynamic content
+            print("WAIT Waiting for dynamic content to load...")
+            page.wait_for_timeout(5000)
+            
+            # Final scroll to bottom to ensure everything is loaded
+            page.mouse.wheel(0, 2000)
+            time.sleep(2)
+
+            page.wait_for_timeout(3000)
+            
+            # Try to take screenshot, but don't fail if it doesn't work
+            try:
+                page.screenshot(path="carrefour_debug.png", full_page=True)
+            except Exception as e:
+                print(f"WARN Screenshot failed: {e}")
+
+            products = extract_carrefour_products(page, "verduras")
+            if not products:
+                print("ERROR No products found.")
+                return
+
+            print(f"BOX Processing {len(products)} products...")
+            for i, product in enumerate(products, 1):
+                try:
+                    existing_product = get_product_by_name_and_store(product["name"], "carrefour")
+                    if existing_product:
+                        if existing_product['price'] != product["price"]:
+                            print(f"RETRY [{i}] Price updated: {product['name']} {existing_product['price']}€ → {product['price']}€")
+                            update_product_price(existing_product['id'], product["price"])
+                        else:
+                            print(f"SKIP [{i}] No change: {product['name']}")
+                    else:
+                        insert_product(product["name"], product["price"], product["category"], "carrefour", product["quantity"])
+                        print(f"SUCCESS [{i}] Inserted: {product['name']} — {product['price']}€ ({product['quantity']})")
+                except Exception as e:
+                    print(f"ERROR DB error on product {i}: {e}")
+
+        except Exception as e:
+            print(f"ERROR Scraping failed: {e}")
+        finally:
+            browser.close()
+            print("FINISH Scraper finished.")
 
 if __name__ == "__main__":
-    asyncio.run(scrape_carrefour())
+    # Verify Playwright installation
+    print("SEARCH Checking required packages...")
+    try:
+        import playwright
+        print("SUCCESS Playwright is installed")
+    except ImportError:
+        print("ERROR Playwright is not installed")
+        print("BOX Please run: pip install playwright")
+        print("THEATER Then run: playwright install")
+        exit(1)
+
+    scrape_carrefour()

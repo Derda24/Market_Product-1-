@@ -82,8 +82,8 @@ def scrape_category(category_name, category_url):
                     if existing_product:
                         # Product exists, check for price change
                         if existing_product['price'] != price:
-                            log(f"🔄 Price changed for {full_name}: {existing_product['price']} -> {price}")
-                            print(f"🔄 Price changed for {full_name}: {existing_product['price']} -> {price}")
+                            log(f"RETRY Price changed for {full_name}: {existing_product['price']} -> {price}")
+                            print(f"RETRY Price changed for {full_name}: {existing_product['price']} -> {price}")
                             update_product_price(existing_product['id'], price)
                         else:
                             log(f"No changes for {full_name}")
@@ -97,18 +97,18 @@ def scrape_category(category_name, category_url):
                             store_id="condisline",
                             quantity=quantity
                         )
-                        log(f"✅ Inserted: {full_name} — {price} [ {quantity} ]")
-                        print(f"✅ Inserted: {full_name} — {price} [ {quantity} ]")
+                        log(f"SUCCESS Inserted: {full_name} — {price} [ {quantity} ]")
+                        print(f"SUCCESS Inserted: {full_name} — {price} [ {quantity} ]")
                 except Exception as e:
-                    log(f"❌ Failed to parse or insert product: {e}")
+                    log(f"ERROR Failed to parse or insert product: {e}")
         except Exception as e:
-            log(f"❌ Error loading or parsing page '{category_name}': {e}")
+            log(f"ERROR Error loading or parsing page '{category_name}': {e}")
         finally:
             browser.close()
 
 
 def main():
-    log("🚀 Starting Condisline scraper")
+    log("START Starting Condisline scraper")
     for name, url in ALIMENTACION_CATEGORIES:
         scrape_category(name, url)
 
