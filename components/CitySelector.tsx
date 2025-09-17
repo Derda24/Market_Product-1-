@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { City, detectNearestCity } from '../lib/geo';
+import { City, detectNearestCity } from '@/lib/geo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
