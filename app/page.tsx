@@ -217,6 +217,10 @@ export default function Home() {
     setSelectedProducts(new Set());
   };
 
+  if (translationLoading) {
+    return <LoadingScreen isLoading={true} />;
+  }
+
   return (
     <>
       <LoadingScreen isLoading={initialLoading} />
