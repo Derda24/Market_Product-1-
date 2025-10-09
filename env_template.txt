@@ -1,0 +1,28 @@
+# Supabase Configuration Template
+# Copy this file to .env and fill in your actual Supabase credentials
+
+# Your Supabase project URL (found in your Supabase dashboard)
+SUPABASE_URL=https://wlthrwgeirjwqqspdopc.supabase.co
+
+# Your Supabase service key (found in your Supabase dashboard under Settings > API)
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsdGhyd2dlaXJqd3Fxc3Bkb3BjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU2MDY0NDQsImV4cCI6MjA2MTE4MjQ0NH0.uYza0lrRE4h3P5_WX7Sm-EYG0KT4I1h67blBYkXQ11g
+
+# Image API Configuration (Free tiers)
+# Google Custom Search API - Get from https://console.cloud.google.com/
+# Free: 100 queries/day
+GOOGLE_API_KEY=your_google_api_key_here
+
+# Google Custom Search Engine ID - Get from https://cse.google.com/
+# Make sure to enable "Image search" when creating
+GOOGLE_CSE_ID=your_google_cse_id_here
+
+# Bing Image Search API - Get from https://portal.azure.com/
+# Free: 1,000 transactions/month
+BING_API_KEY=your_bing_api_key_here
+
+# Example format:
+# SUPABASE_URL=https://your-project-id.supabase.co
+# SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# GOOGLE_API_KEY=AIzaSyC...
+# GOOGLE_CSE_ID=012345678901234567890:abcdefghijk
+# BING_API_KEY=1234567890abcdef1234567890abcdef 
