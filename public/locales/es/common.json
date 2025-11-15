@@ -1,7 +1,7 @@
 {
   "header": {
     "title": "Market Explorer",
-    "titleGeneric": "Explorador de mercados en España",
+    "titleGeneric": "Market Explorer",
     "subtitle": "Encuentra los mejores precios en supermercados de tu ciudad",
     "subtitleGeneric": "Encuentra los mejores precios en supermercados de tu ciudad",
     "searchPlaceholder": "Buscar productos...",
@@ -10,7 +10,8 @@
     "allStores": "Todas las tiendas"
   },
   "cities": {
-    "searchPlaceholder": "Buscar ciudad"
+    "searchPlaceholder": "Buscar ciudad",
+    "noResults": "No se encontraron ciudades"
   },
   "filters": {
     "search": "Buscar productos",
@@ -69,6 +70,9 @@
   "language": {
     "switch": "Cambiar idioma",
     "spanish": "Español",
-    "english": "English"
+    "english": "English",
+    "italian": "Italiano",
+    "french": "Francés",
+    "german": "Alemán"
   }
 }

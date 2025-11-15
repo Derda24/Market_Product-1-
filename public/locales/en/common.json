@@ -1,7 +1,7 @@
 {
   "header": {
     "title": "Market Explorer",
-    "titleGeneric": "Spain Market Explorer",
+    "titleGeneric": "Market Explorer",
     "subtitle": "Find the best prices across supermarkets in your city",
     "subtitleGeneric": "Find the best prices across supermarkets in your city",
     "searchPlaceholder": "Search products...",
@@ -10,7 +10,8 @@
     "allStores": "All stores"
   },
   "cities": {
-    "searchPlaceholder": "Search city"
+    "searchPlaceholder": "Search city",
+    "noResults": "No cities found"
   },
   "filters": {
     "search": "Search products",
@@ -69,6 +70,9 @@
   "language": {
     "switch": "Switch language",
     "spanish": "Español",
-    "english": "English"
+    "english": "English",
+    "italian": "Italian",
+    "french": "French",
+    "german": "German"
   }
 }

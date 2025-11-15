@@ -39,11 +39,18 @@ export const CitySelector: React.FC<CitySelectorProps> = ({ value, onChange }) =
   }, []);
 
   useEffect(() => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setCities([]);
+      setLoading(false);
+      return;
+    }
+
     const controller = new AbortController();
     const fetchCities = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/cities?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const res = await fetch(`/api/cities?q=${encodeURIComponent(trimmedQuery)}`, { signal: controller.signal });
         const json = await res.json();
         setCities(json.cities || []);
       } catch {}
@@ -58,6 +65,8 @@ export const CitySelector: React.FC<CitySelectorProps> = ({ value, onChange }) =
     onChange?.(c);
     if (typeof window !== 'undefined') localStorage.setItem('selectedCity', JSON.stringify(c));
   };
+
+  const hasQuery = query.trim().length > 0;
 
   return (
     <div className="w-full md:w-80 md:ml-auto">
@@ -80,31 +89,35 @@ export const CitySelector: React.FC<CitySelectorProps> = ({ value, onChange }) =
             </Button>
           )}
         </div>
-        <div className="absolute right-0 mt-2 w-full md:w-[22rem] max-h-64 overflow-auto rounded-xl border border-gray-200 bg-white shadow-xl z-50">
-          {loading ? (
-            <div className="p-3 text-sm text-gray-500">{t('products.loading')}</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {cities.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => handleSelect(c)}
-                  className={`w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
-                    selected?.id === c.id ? 'bg-blue-50/60' : ''
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-gray-800 leading-tight">{c.name}</div>
-                      <div className="text-gray-500 text-xs">{c.region}</div>
+        {hasQuery && (
+          <div className="absolute right-0 mt-2 w-full md:w-[22rem] max-h-64 overflow-auto rounded-xl border border-gray-200 bg-white shadow-xl z-50">
+            {loading ? (
+              <div className="p-3 text-sm text-gray-500">{t('products.loading')}</div>
+            ) : cities.length > 0 ? (
+              <div className="divide-y divide-gray-100">
+                {cities.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleSelect(c)}
+                    className={`w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 transition-colors ${
+                      selected?.id === c.id ? 'bg-blue-50/60' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-gray-800 leading-tight">{c.name}</div>
+                        <div className="text-gray-500 text-xs">{c.region}</div>
+                      </div>
+                      <div className="text-gray-300">→</div>
                     </div>
-                    <div className="text-gray-300">→</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 text-sm text-gray-500">{t('cities.noResults')}</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
