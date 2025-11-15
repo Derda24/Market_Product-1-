@@ -1,0 +1,78 @@
+{
+  "header": {
+    "title": "Market Explorer",
+    "titleGeneric": "Market Explorer",
+    "subtitle": "Trouvez les meilleurs prix dans les supermarchés de votre ville",
+    "subtitleGeneric": "Trouvez les meilleurs prix dans les supermarchés de votre ville",
+    "searchPlaceholder": "Rechercher des produits...",
+    "filterByStore": "Filtrer par magasin",
+    "priceRange": "Fourchette de prix",
+    "allStores": "Tous les magasins"
+  },
+  "cities": {
+    "searchPlaceholder": "Rechercher une ville"
+  },
+  "filters": {
+    "search": "Rechercher des produits",
+    "store": "Magasin",
+    "priceRange": "Fourchette de prix",
+    "minPrice": "Prix minimum",
+    "maxPrice": "Prix maximum",
+    "applyFilters": "Appliquer les filtres",
+    "clearFilters": "Effacer les filtres"
+  },
+  "products": {
+    "loading": "Chargement des produits...",
+    "noProducts": "Aucun produit trouvé",
+    "loadMore": "Charger plus de produits",
+    "showing": "Affichage",
+    "of": "sur",
+    "products": "produits",
+    "pricePerUnit": "par unité",
+    "addToComparison": "Ajouter à la comparaison",
+    "removeFromComparison": "Retirer de la comparaison",
+    "viewComparison": "Voir la comparaison",
+    "clearComparison": "Effacer la comparaison"
+  },
+  "productCard": {
+    "store": "Magasin",
+    "price": "Prix",
+    "quantity": "Quantité",
+    "category": "Catégorie",
+    "nutritionFacts": "Informations nutritionnelles",
+    "addToComparison": "Comparer",
+    "removeFromComparison": "Retirer",
+    "nutritionPer100g": "Valeurs pour 100g",
+    "energy": "Énergie",
+    "sugars": "Sucres",
+    "salt": "Sel",
+    "satFat": "Graisses sat.",
+    "nutriScore": "Nutri-Score",
+    "novaGroup": "Groupe NOVA",
+    "novaInfo": "Classification du niveau de transformation",
+    "priceUnavailable": "Prix non disponible",
+    "refreshPriceHistory": "Actualiser l'historique des prix",
+    "viewPriceHistory": "Voir l'historique des prix"
+  },
+  "comparison": {
+    "title": "Comparaison de produits",
+    "close": "Fermer",
+    "noProducts": "Aucun produit à comparer",
+    "addProducts": "Ajoutez des produits à comparer"
+  },
+  "footer": {
+    "about": "À propos",
+    "contact": "Contact",
+    "privacy": "Confidentialité",
+    "terms": "Conditions"
+  },
+  "language": {
+    "switch": "Changer de langue",
+    "spanish": "Español",
+    "english": "English",
+    "italian": "Italiano",
+    "french": "Français",
+    "german": "Deutsch"
+  }
+}
+

@@ -59,10 +59,10 @@ export function LoadingScreen({ isLoading }: LoadingScreenProps) {
               className="mb-8"
             >
               <h1 className="text-4xl md:text-6xl font-bold mb-4 text-white drop-shadow-lg">
-                Spain Market Explorer
+                {t('header.titleGeneric')}
               </h1>
               <p className="text-xl md:text-2xl text-gray-100 drop-shadow">
-                Find the best prices across supermarkets in your city
+                {t('header.subtitleGeneric')}
               </p>
             </motion.div>
 
@@ -71,7 +71,7 @@ export function LoadingScreen({ isLoading }: LoadingScreenProps) {
               transition={{ duration: 0.5 }}
               className="text-lg font-medium text-gray-100 drop-shadow"
             >
-              Loading products...
+              {t('products.loading')}
             </motion.div>
           </div>
         </motion.div>
