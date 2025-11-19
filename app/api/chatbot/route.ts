@@ -4,17 +4,34 @@ import { NextRequest, NextResponse } from 'next/server';
 function buildOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error('Missing OPENAI_API_KEY');
+    throw new Error('Missing OPENAI_API_KEY environment variable');
   }
 
   const baseURL = process.env.OPENAI_API_BASE?.trim();
   const organization = process.env.OPENAI_ORG_ID?.trim();
 
-  return new OpenAI({
+  // Validate baseURL format if provided
+  if (baseURL && baseURL.length > 0) {
+    try {
+      new URL(baseURL);
+    } catch (e) {
+      throw new Error(`Invalid base URL format: ${baseURL}`);
+    }
+  }
+
+  const config: any = {
     apiKey,
-    baseURL: baseURL && baseURL.length > 0 ? baseURL : undefined,
-    organization: organization && organization.length > 0 ? organization : undefined,
-  });
+  };
+
+  if (baseURL && baseURL.length > 0) {
+    config.baseURL = baseURL;
+  }
+
+  if (organization && organization.length > 0) {
+    config.organization = organization;
+  }
+
+  return new OpenAI(config);
 }
 
 export async function POST(request: NextRequest) {
@@ -22,14 +39,24 @@ export async function POST(request: NextRequest) {
   try {
     openai = buildOpenAIClient();
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('OpenAI client initialization error:', errorMessage);
     return NextResponse.json(
-      { reply: 'Chat assistant is not configured. Please set up your OpenAI credentials.' },
+      { reply: `Chat assistant configuration error: ${errorMessage}` },
       { status: 500 }
     );
   }
 
   try {
-    const { messages } = await request.json();
+    const body = await request.json();
+    const { messages } = body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return NextResponse.json(
+        { reply: 'Invalid request: messages array is required.' },
+        { status: 400 }
+      );
+    }
 
     // System prompt
     const systemPrompt = {
@@ -96,7 +123,32 @@ For all other questions, reply conversationally.`
 
     return NextResponse.json({ reply });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ reply: 'Something went wrong 😔' }, { status: 500 });
+    console.error('Chatbot API Error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Something went wrong 😔';
+    
+    if (error instanceof Error) {
+      // Check for common OpenAI API errors
+      if (error.message.includes('API key')) {
+        errorMessage = 'Invalid API key. Please check your OpenAI API configuration.';
+      } else if (error.message.includes('rate limit')) {
+        errorMessage = 'Rate limit exceeded. Please try again later.';
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection and API endpoint.';
+      } else if (error.message.includes('Invalid base URL')) {
+        errorMessage = 'Invalid API base URL. Please check your OPENAI_API_BASE configuration.';
+      } else {
+        // Log the actual error for debugging
+        console.error('Detailed error:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        errorMessage = `Error: ${error.message}`;
+      }
+    }
+    
+    return NextResponse.json({ reply: errorMessage }, { status: 500 });
   }
 }

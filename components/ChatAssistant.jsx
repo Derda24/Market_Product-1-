@@ -53,20 +53,30 @@ export default function ChatAssistant() {
 
       const data = await res.json()
       
+      // Check if the response indicates an error
+      if (!res.ok) {
+        throw new Error(data.reply || 'An error occurred')
+      }
+      
       // Simulate typing delay for better UX
       setTimeout(() => {
         setMessages([...newMessages, { 
           sender: 'bot', 
-          text: data.reply,
+          text: data.reply || 'Sorry, I couldn\'t generate a response.',
           timestamp: new Date()
         }])
         setLoading(false)
         setIsTyping(false)
       }, 1000)
     } catch (error) {
+      console.error('Chatbot error:', error)
+      const errorMessage = error instanceof Error && error.message 
+        ? error.message 
+        : 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.'
+      
       setMessages([...newMessages, { 
         sender: 'bot', 
-        text: 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.',
+        text: errorMessage,
         timestamp: new Date()
       }])
       setLoading(false)
